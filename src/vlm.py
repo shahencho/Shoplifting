@@ -46,6 +46,7 @@ class Verdict:
     prompt_tokens: int = 0
     completion_tokens: int = 0
     cost_usd: float = 0.0
+    reasoning_tokens: int = 0
 
 
 def parse_response(text: str) -> tuple[str, int, str, list[str]]:
@@ -128,10 +129,12 @@ class VLMClient:
             text = (resp.choices[0].message.content or "") if resp.choices else ""
             verdict, conf, expl, acts = parse_response(text)
             u = resp.usage
+            details = getattr(u, "completion_tokens_details", None)
             return Verdict(
                 verdict, conf, expl, acts, text, time.monotonic() - t0,
                 getattr(u, "prompt_tokens", 0) or 0,
                 getattr(u, "completion_tokens", 0) or 0,
                 float(getattr(u, "cost", 0) or 0),
+                getattr(details, "reasoning_tokens", 0) or 0,
             )
         return Verdict("ERROR", 0, last_err[:300], [], "", 0.0)

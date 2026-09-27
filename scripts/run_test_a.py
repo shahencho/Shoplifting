@@ -23,7 +23,7 @@ from src.vlm import VLMClient
 
 FIELDS = ["dataset", "clip_id", "label", "verdict", "pred", "confidence", "explanation",
           "actions", "model", "latency_s", "prompt_tokens", "completion_tokens", "cost_usd",
-          "timestamp", "path", "raw"]
+          "timestamp", "path", "raw", "reasoning_tokens"]
 
 
 def main() -> None:
@@ -33,6 +33,9 @@ def main() -> None:
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None, help="CSV path (default outputs/test_a_<dataset>_<model>.csv)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--model", default=None, help="override VLM_MODEL_NAME from .env")
+    ap.add_argument("--max-tokens", type=int, default=None, help="override vlm.max_tokens (raise for reasoning models)")
+    ap.add_argument("--timeout", type=float, default=None, help="override vlm.timeout_s")
     args = ap.parse_args()
 
     cfg = load_config()
@@ -63,7 +66,13 @@ def main() -> None:
         return
 
     vs = vlm_settings()
+    if args.model:
+        vs["model"] = args.model
     v = cfg["vlm"]
+    if args.max_tokens:
+        v["max_tokens"] = args.max_tokens
+    if args.timeout:
+        v["timeout_s"] = args.timeout
     client = VLMClient(vs["base_url"], vs["api_key"], vs["model"], temperature=v["temperature"],
                        max_tokens=v["max_tokens"], timeout_s=v["timeout_s"],
                        max_retries=v["max_retries"], rate_limit_per_min=v["rate_limit_per_min"])
@@ -101,7 +110,7 @@ def main() -> None:
                 "latency_s": f"{r.latency_s:.2f}", "prompt_tokens": r.prompt_tokens,
                 "completion_tokens": r.completion_tokens, "cost_usd": f"{r.cost_usd:.6f}",
                 "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "path": str(cl.path), "raw": r.raw,
+                "path": str(cl.path), "raw": r.raw, "reasoning_tokens": r.reasoning_tokens,
             })
             f.flush()
 
