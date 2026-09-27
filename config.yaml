@@ -14,14 +14,15 @@ datasets:
 # Step 1 (Test A): VLM on evenly spaced frames
 test_a:
   num_frames: 5               # K frames per clip, as in Paza
+  prompt_version: paza        # see PROMPTS in src/vlm.py (v1 = our first prompt)
   max_side: 640               # resize frames so the longest side is at most this (px)
   jpeg_quality: 85
   positive_verdicts: [CONFIRMED, UNCERTAIN]   # counted as "shoplifting" for metrics
 
 vlm:
   temperature: 0.0
-  max_tokens: 600
-  timeout_s: 90
+  max_tokens: 16000           # reasoning models (qwen3.6-plus) can think >4000 tokens on hard clips
+  timeout_s: 900
   max_retries: 3
   rate_limit_per_min: 10      # hard cap on VLM calls per minute (Paza)
 

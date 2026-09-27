@@ -23,7 +23,7 @@ from src.vlm import VLMClient
 
 FIELDS = ["dataset", "clip_id", "label", "verdict", "pred", "confidence", "explanation",
           "actions", "model", "latency_s", "prompt_tokens", "completion_tokens", "cost_usd",
-          "timestamp", "path", "raw", "reasoning_tokens"]
+          "timestamp", "path", "raw", "reasoning_tokens", "prompt_version"]
 
 
 def main() -> None:
@@ -31,8 +31,9 @@ def main() -> None:
     ap.add_argument("dataset", choices=DATASETS)
     ap.add_argument("--limit", type=int, default=0, help="only the first N clips (balanced, shuffled with --seed)")
     ap.add_argument("--seed", type=int, default=0)
-    ap.add_argument("--out", default=None, help="CSV path (default outputs/test_a_<dataset>_<model>.csv)")
+    ap.add_argument("--out", default=None, help="CSV path (default outputs/test_a_<dataset>_<model>_<prompt>[_n<limit>].csv)")
     ap.add_argument("--dry-run", action="store_true")
+    ap.add_argument("--prompt", default=None, help="prompt version from src/vlm.py PROMPTS (default: config test_a.prompt_version)")
     ap.add_argument("--model", default=None, help="override VLM_MODEL_NAME from .env")
     ap.add_argument("--max-tokens", type=int, default=None, help="override vlm.max_tokens (raise for reasoning models)")
     ap.add_argument("--timeout", type=float, default=None, help="override vlm.timeout_s")
@@ -65,6 +66,7 @@ def main() -> None:
         print(f"Dry run: frames for {len(clips)} clips written to {frame_dir}")
         return
 
+    prompt = args.prompt or ta.get("prompt_version", "v1")
     vs = vlm_settings()
     if args.model:
         vs["model"] = args.model
@@ -75,10 +77,14 @@ def main() -> None:
         v["timeout_s"] = args.timeout
     client = VLMClient(vs["base_url"], vs["api_key"], vs["model"], temperature=v["temperature"],
                        max_tokens=v["max_tokens"], timeout_s=v["timeout_s"],
-                       max_retries=v["max_retries"], rate_limit_per_min=v["rate_limit_per_min"])
+                       max_retries=v["max_retries"], rate_limit_per_min=v["rate_limit_per_min"],
+                       prompt_version=prompt)
 
-    model_tag = vs["model"].replace("/", "_").replace(":", "_")
-    out = resolve(args.out) if args.out else out_dir / f"test_a_{args.dataset}_{model_tag}.csv"
+    # Model, prompt and sample size are in the file name, so runs with different settings
+    # never share a CSV (resume would otherwise skip clips answered under other settings).
+    model_tag = vs["model"].split("/")[-1].replace(":", "_")
+    size_tag = f"_n{args.limit}" if args.limit else ""
+    out = resolve(args.out) if args.out else out_dir / f"test_a_{args.dataset}_{model_tag}_{prompt}{size_tag}.csv"
 
     done: set[str] = set()
     if out.exists():
@@ -110,7 +116,7 @@ def main() -> None:
                 "latency_s": f"{r.latency_s:.2f}", "prompt_tokens": r.prompt_tokens,
                 "completion_tokens": r.completion_tokens, "cost_usd": f"{r.cost_usd:.6f}",
                 "timestamp": datetime.now().isoformat(timespec="seconds"),
-                "path": str(cl.path), "raw": r.raw, "reasoning_tokens": r.reasoning_tokens,
+                "path": str(cl.path), "raw": r.raw, "reasoning_tokens": r.reasoning_tokens, "prompt_version": prompt,
             })
             f.flush()
 
