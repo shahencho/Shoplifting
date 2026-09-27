@@ -32,6 +32,11 @@ def main() -> None:
     parts = [format_report(m, f"Results: {path.stem}")]
     parts += ["", "### vs. Paza (reported)", "", "| metric | ours | Paza |", "|---|---:|---:|"]
     parts += [f"| {k} | {m[k]:.3f} | {v:.3f} |" for k, v in PAZA.items()]
+    strict = binary_metrics(y_true, (df["verdict"] == "CONFIRMED").astype(int).tolist())
+    parts += ["", "### Alternative rule: only CONFIRMED counts as an alarm", "",
+              f"TP {strict['tp']}, FN {strict['fn']}, FP {strict['fp']}, TN {strict['tn']} -> "
+              f"precision {strict['precision']:.1%}, recall {strict['recall']:.1%}, "
+              f"specificity {strict['specificity']:.1%}, F1 {strict['f1']:.3f}"]
     parts += ["", "### Verdict breakdown", "", df.groupby(["label", "verdict"]).size().to_string()]
     if "cost_usd" in df:
         parts += ["", f"Total API cost: ${df['cost_usd'].sum():.4f}",
