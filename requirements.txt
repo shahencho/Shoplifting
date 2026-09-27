@@ -1,0 +1,10 @@
+ultralytics>=8.3
+opencv-python>=4.9
+numpy>=1.26
+pandas>=2.2
+openai>=1.40
+python-dotenv>=1.0
+pyyaml>=6.0
+tqdm>=4.66
+scikit-learn>=1.4
+kaggle>=1.7

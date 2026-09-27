@@ -1,0 +1,42 @@
+# Central configuration. Secrets (API keys) live in .env, never here.
+
+paths:
+  data_dir: data
+  outputs_dir: outputs
+
+datasets:
+  mnnit:
+    root: data/mnnit          # unzip the Mendeley / Kaggle download here
+  dcsass:
+    root: data/dcsass         # unzip the Kaggle download here
+    category: Shoplifting     # DCSASS has many crime categories; we only use this one
+
+# Step 1 (Test A): VLM on evenly spaced frames
+test_a:
+  num_frames: 5               # K frames per clip, as in Paza
+  max_side: 640               # resize frames so the longest side is at most this (px)
+  jpeg_quality: 85
+  positive_verdicts: [CONFIRMED, UNCERTAIN]   # counted as "shoplifting" for metrics
+
+vlm:
+  temperature: 0.0
+  max_tokens: 600
+  timeout_s: 90
+  max_retries: 3
+  rate_limit_per_min: 10      # hard cap on VLM calls per minute (Paza)
+
+# Step 2+ (Test B/C): full pipeline. Values from the Paza paper.
+detector:
+  det_model: yolo11n.pt
+  pose_model: yolo11n-pose.pt
+  tracker: bytetrack.yaml
+  conf: 0.35
+
+trigger:
+  buffer_seconds: 5.0         # per-person frame buffer
+  dwell_seconds: 3.0          # minimum time in view before we consider a person
+  object_distance_ratio: 0.3  # rho: x person bbox diagonal (~ arm's reach)
+  hand_to_body_ratio: 0.3     # theta: x person height (wrist inside torso zone)
+  cooldown_seconds: 10.0      # per person, no repeated VLM calls
+  clip_frames: 5              # K frames sent to the VLM
+  crop_padding: 0.2           # 20% padding around the person crop

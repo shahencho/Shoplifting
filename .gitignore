@@ -1,0 +1,24 @@
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Secrets
+.env
+.env*
+!.env.example
+
+# Datasets and results (large, and may contain personal data)
+data/*
+!data/README.md
+outputs/*
+!outputs/.gitkeep
+
+# Model weights downloaded by ultralytics
+*.pt
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+.DS_Store
