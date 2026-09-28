@@ -1,0 +1,15 @@
+ M README.md
+ M config.yaml
+ M data/README.md
+ M requirements.txt
+ M scripts/_common.py
+ M scripts/run_test_a.py
+ M src/datasets.py
+?? benchmarks/
+?? docs/
+?? scripts/compare.py
+?? scripts/run_pipeline.py
+?? src/detect_track.py
+?? src/pipeline.py
+?? src/trigger.py
+?? test_youtube/

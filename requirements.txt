@@ -8,3 +8,4 @@ pyyaml>=6.0
 tqdm>=4.66
 scikit-learn>=1.4
 kaggle>=1.7
+lap>=0.5.12              # ByteTrack dependency (ultralytics installs it on first use otherwise)

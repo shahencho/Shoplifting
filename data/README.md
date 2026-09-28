@@ -57,6 +57,13 @@ data/dcsass/
     └── ...
 ```
 
+## Zenodo staged shoplifting set (trigger recall check)
+
+- **Source:** https://zenodo.org/records/10149996 (`shoplifting.rar`)
+- **Content:** 431 short `.mp4` clips, all **staged theft** acted out for the dataset (no normal clips, not a real store camera). The loader labels every clip 1.
+- **Where it is:** `config.yaml` → `datasets.zenodo.root` (currently the unpacked Downloads folder; point it elsewhere if you move it)
+- **Use:** `run_pipeline.py zenodo --dry-run` measures how often the trigger fires on known thefts (recall ceiling). Precision/specificity are meaningless here because there are no normal clips.
+
 ## 3. Later (not needed yet)
 
 - Simuletic synthetic dataset: https://www.kaggle.com/datasets/simuletic/cctv-shoplifting-detection-dataset-yolo-and-vlm → `data/simuletic/`

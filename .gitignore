@@ -14,6 +14,16 @@ data/*
 outputs/*
 !outputs/.gitkeep
 
+# Frozen benchmarks are kept in git, except the videos (large, downloaded from YouTube)
+benchmarks/*/videos/
+
+# YouTube test media (re-downloadable with yt-dlp); keep the lists and notes (clips.csv, raw_labels.csv, *.md)
+test_youtube/**/*.mp4
+test_youtube/**/*.jpg
+test_youtube/**/*.info.json
+test_youtube/_hq_backup/
+test_youtube/work/
+
 # Model weights downloaded by ultralytics
 *.pt
 
