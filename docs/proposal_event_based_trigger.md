@@ -74,6 +74,35 @@ The idea is to replace "fire → idle 10 s" with **suspicion episodes** that can
 
 Follow-ups add calls only for people who keep producing cues. To keep the total cost flat or lower, this should come together with fix A below.
 
+## Validation without Qwen (2026-09-29, dry run on the frozen baseline v1 tracks)
+
+Implemented as `trigger_mode: episode` (default stays `paza`). Run it with `run_pipeline.py --trigger-mode episode`.
+
+- **The paza path is unchanged:** replaying MNNIT n50 and YouTube raw in paza mode reproduces every baseline trigger.
+- **`7aMUGLzBQFw`, frames that would be sent** (sheet: `outputs/val_7aMU_paza_vs_episode.jpg`):
+  - paza: 8.5–13.4 s → walks in, stands, reaches toward the shelf. No grab, no exit.
+  - episode: 11.44, 11.92, 13.2, **14.48**, 16.88 s → standing, reaching, reaching up, **hand at the shelf holding the figurine**, walking out the door.
+  - One refinement came out of this check: keyframes must be ≥ 0.3 s apart, and freed slots go to the largest time gap (the person left right after the last cue, which gave two near-identical exit frames).
+- **Number of calls (upper bound, before the follow-up rules):**
+
+  | Set | Baseline calls | Episodes | Expected calls in episode mode |
+  |---|---:|---:|---|
+  | YouTube `7aMUGLzBQFw` | 1 | 1 | 1 |
+  | YouTube `yJNfmbiioA4` / `fsqruJl85yo` / `QfE15hkvA8k` | 1 / 2 / 11 | 6 / 7 / 13 | depends on verdicts (stop at CONFIRMED, follow-up rules) |
+  | MNNIT n50 | 59 | 106 | **62–94** if all NORMAL (62 people each get ≥ 1 call, plus 32 "strong" follow-ups) |
+
+  So episode mode may cost **up to ~60% more calls** on MNNIT, mainly because it no longer drops later activity. Tightening the follow-up rule (fix A below, or allowing follow-ups only after UNCERTAIN) would bring this down.
+- **Single Qwen check on `7aMUGLzBQFw`** (qwen3.6-plus, prompt paza, frozen tracks):
+
+  | Run | Frames (s) | Verdict | Cost / time |
+  |---|---|---|---|
+  | baseline v1 (paza) | 8.5 → 13.4 | NORMAL (90) | $0.005 / 13 s |
+  | episode, keyframe = nearest cue | 11.44, 11.92, 13.2, 14.48, 16.88 | UNCERTAIN (60): "ambiguous whether the item was … taken … or returned to the shelf" | $0.012 / 101 s |
+  | **episode, keyframe = end of the cue burst** | 11.44, 12.32, 13.6, **14.8**, 16.88 | **CONFIRMED (85)**: "holding a dark object … close to their torso/waist area … exits the store" | $0.006 / 53 s |
+
+  The step from UNCERTAIN to CONFIRMED is one rule: each middle keyframe is the **last** frame of its cue burst (`BURST_GAP_S = 0.25`). hand_to_body fires while the hand moves in, and the evidence (item at the body) is where the movement ends. The frame at 14.48 s showed the hand still at the shelf; the frame at 14.8 s shows the figurine held against the body.
+- **Not validated yet:** whether this holds beyond one video, and whether clips that were correct in the baseline stay correct (e.g. `yJNfmbiioA4` now gets different frames). That needs the Qwen run in [benchmarking.md](benchmarking.md).
+
 ## Related fixes (separate decisions)
 
 - **A. The hand_to_body cue is too noisy.** In `yJNfmbiioA4` (19 s, 3 people) it fired about 70 times. In `QfE15hkvA8k` (a news report, 155 s) it caused 11 VLM calls, 10 of them on people who clearly weren't stealing. One option: count hand_to_body only after the person has been near shelves or objects in the last few seconds (reach → body), and ignore it when the person is standing still with no object interaction. Needs normal footage to tune.

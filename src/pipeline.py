@@ -86,13 +86,17 @@ def run_clip(path: Path, tracks: dict, trigger_cfg: dict, *, client: VLMClient |
         return res
 
     k, pad = trigger_cfg["clip_frames"], trigger_cfg["crop_padding"]
+    max_per_person = trigger_cfg.get("episode_max_calls_per_person", 3)
     plans = []
     for ev in events:
-        chosen = select_frames(ev.buffer, k)
+        chosen = ev.keyframes if ev.keyframes else select_frames(ev.buffer, k)
         plans.append((ev, [i for i, _ in chosen],
                       crop_box([b for _, b in chosen], pad, tracks["width"], tracks["height"])))
     frames = read_frames(path, {i for _, idxs, _ in plans for i in idxs})
 
+    last_verdict: dict[int, str] = {}   # episode mode: per person, for the follow-up rules
+    n_calls: dict[int, int] = {}
+    last_span: dict[int, float] = {}    # cue span (s) of the person's last judged episode
     for n, (ev, idxs, (x1, y1, x2, y2)) in enumerate(plans):
         er = EventResult(ev, idxs, [x1, y1, x2, y2])
         res.events.append(er)
@@ -107,7 +111,17 @@ def run_clip(path: Path, tracks: dict, trigger_cfg: dict, *, client: VLMClient |
             continue
         if max_calls and sum(e.verdict is not None for e in res.events) >= max_calls:
             continue
+        if ev.keyframes is not None:
+            # follow-up rules: after NORMAL only a stronger episode, after UNCERTAIN always
+            if n_calls.get(ev.tid, 0) >= max_per_person:
+                continue
+            span = ev.end_t - ev.t
+            if last_verdict.get(ev.tid) == "NORMAL" and not ev.strong and span <= last_span.get(ev.tid, 0.0):
+                continue
+            last_span[ev.tid] = span
         er.verdict = client.classify(jpegs)
+        last_verdict[ev.tid] = er.verdict.verdict
+        n_calls[ev.tid] = n_calls.get(ev.tid, 0) + 1
         if er.verdict.verdict in stop_on:
             break
     return res

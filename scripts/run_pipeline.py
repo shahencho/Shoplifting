@@ -39,10 +39,13 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("dataset", choices=DATASETS)
     ap.add_argument("--limit", type=int, default=0, help="only N clips (balanced, shuffled with --seed)")
+    ap.add_argument("--clip", action="append", default=None, help="only this clip id (repeatable)")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--out", default=None, help="CSV path (default outputs/test_b_<dataset>_<model>_<prompt>[_n<limit>].csv)")
     ap.add_argument("--dry-run", action="store_true", help="no VLM calls; save the crops each trigger would send")
     ap.add_argument("--recompute", action="store_true", help="ignore cached YOLO tracks")
+    ap.add_argument("--trigger-mode", choices=("paza", "episode"), default=None,
+                    help="override trigger.trigger_mode from config.yaml")
     ap.add_argument("--tracks", default=None,
                     help="read YOLO tracks from this folder (read-only, e.g. a frozen benchmark) instead of outputs/tracks/<dataset>")
     ap.add_argument("--prompt", default=None)
@@ -56,10 +59,16 @@ def main() -> None:
     ta, tb, det, trig = cfg["test_a"], cfg["test_b"], cfg["detector"], cfg["trigger"]
     if args.dwell is not None:
         trig["dwell_seconds"] = args.dwell
+    if args.trigger_mode:
+        trig["trigger_mode"] = args.trigger_mode
     positive = set(ta["positive_verdicts"])
     clips = load_clips(args.dataset, cfg)
     if args.limit:
         clips = sample_balanced(clips, args.limit, args.seed)
+    if args.clip:
+        clips = [c for c in clips if c.clip_id in set(args.clip)]
+        if not clips:
+            raise SystemExit(f"no clip matches {args.clip}")
 
     out_dir = resolve(cfg["paths"]["outputs_dir"])
     track_dir = resolve(args.tracks) if args.tracks else out_dir / "tracks" / args.dataset
@@ -80,7 +89,8 @@ def main() -> None:
 
     # --- stage 2: trigger + VLM ---
     prompt = args.prompt or ta.get("prompt_version", "v1")
-    size_tag = (f"_dwell{args.dwell:g}" if args.dwell is not None else "") + (f"_n{args.limit}" if args.limit else "")
+    size_tag = ("_episode" if trig.get("trigger_mode") == "episode" else "") \
+        + (f"_dwell{args.dwell:g}" if args.dwell is not None else "") + (f"_n{args.limit}" if args.limit else "")
     client, model = None, ""
     if args.dry_run:
         stem = f"test_b_{args.dataset}_dryrun{size_tag}"
@@ -97,7 +107,7 @@ def main() -> None:
         stem = f"test_b_{args.dataset}_{model.split('/')[-1].replace(':', '_')}_{prompt}{size_tag}"
     out = resolve(args.out) if args.out else out_dir / f"{stem}.csv"
     events_path = out.with_suffix(".events.jsonl")
-    crops_dir = out_dir / f"{stem}_crops" if args.dry_run else None
+    crops_dir = out.parent / f"{out.stem}_crops" if args.dry_run else None
 
     # a dry run is cheap and should reflect the current trigger settings, so it always starts over
     if args.dry_run:

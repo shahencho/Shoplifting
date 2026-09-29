@@ -59,6 +59,13 @@ trigger:
   motion_seconds: 0.5         # hand_to_body: compare wrist-to-torso distance with this long ago
   min_approach_ratio: 0.05    # ... it must have shrunk by at least this x person height
   post_trigger_seconds: 1.5   # wait this long after a trigger so the frames include what comes next
+  # paza = baseline v1 (fire on first cue, 5 evenly spaced frames, cooldown). episode = proposal in
+  # docs/proposal_event_based_trigger.md (cooldown/post_trigger are not used there)
+  trigger_mode: paza
+  episode_gap_seconds: 2.0    # cues closer than this belong to one episode
+  episode_max_seconds: 6.0    # longest episode; later cues open the next one
+  episode_margin_seconds: 0.5 # first/last keyframe this long before the first / after the last cue
+  episode_max_calls_per_person: 3
 
 # Step 2+ (Test B/C): how the VLM is used per clip
 test_b:

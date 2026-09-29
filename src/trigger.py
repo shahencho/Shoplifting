@@ -19,6 +19,13 @@ concealment itself usually follows a moment later. So a fired event is held for
 post_trigger_seconds while the person's boxes keep being added, and only then emitted. Its
 buffer then covers roughly [fire - (buffer - post), fire + post]. Call flush() at the end of a
 video to emit events still being held.
+
+Episode mode (trigger_mode: episode, see docs/proposal_event_based_trigger.md): instead of
+firing on the first cue and ignoring the person for cooldown_seconds, cues open a per-person
+episode that is extended while cues keep coming (gap <= episode_gap_seconds, length <=
+episode_max_seconds). When it closes, K keyframes are chosen from it: one just before the first
+cue, one just after the last, and K-2 spread over the cue span, each snapped to the nearest
+frame where a cue fired. A later cue burst opens a new episode (a possible follow-up call).
 """
 from __future__ import annotations
 
@@ -27,6 +34,9 @@ from collections import deque
 from dataclasses import dataclass, field
 
 from src.detect_track import L_HIP, L_SHOULDER, L_WRIST, R_HIP, R_SHOULDER, R_WRIST
+
+MIN_KEYFRAME_GAP_S = 0.3   # episode keyframes closer than this are near-duplicates
+BURST_GAP_S = 0.25         # cues closer than this are one continuous movement (a burst)
 
 TORSO = (L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
 WRISTS = (L_WRIST, R_WRIST)
@@ -39,6 +49,18 @@ class TriggerEvent:
     t: float                   # when the trigger fired (the event is emitted post_trigger_seconds later)
     reasons: list[str]
     buffer: list[tuple[int, list[float]]]  # (frame idx, person box) over the last buffer_seconds
+    keyframes: list[tuple[int, list[float]]] | None = None  # episode mode: the frames to send
+    end_t: float | None = None             # episode mode: time of the last cue
+    strong: bool = False                   # episode mode: pickup, or near_object + hand_to_body
+
+
+@dataclass
+class _Episode:
+    start_t: float
+    last_cue_t: float
+    cues: list = field(default_factory=list)    # (t, idx, box) where a cue fired
+    boxes: list = field(default_factory=list)   # (t, idx, box) from start - margin on
+    reasons: set = field(default_factory=set)
 
 
 @dataclass
@@ -70,11 +92,21 @@ class TriggerFilter:
         self.motion_s = cfg.get("motion_seconds", 0.5)
         self.min_approach = cfg.get("min_approach_ratio", 0.05)
         self.post_s = cfg.get("post_trigger_seconds", 0.0)
+        self.mode = cfg.get("trigger_mode", "paza")
+        if self.mode not in ("paza", "episode"):
+            raise ValueError(f"trigger_mode must be paza or episode, not {self.mode!r}")
+        self.ep_gap = cfg.get("episode_gap_seconds", 2.0)
+        self.ep_max = cfg.get("episode_max_seconds", 6.0)
+        self.ep_margin = cfg.get("episode_margin_seconds", 0.5)
+        self.k = cfg.get("clip_frames", 5)
         self.tracks: dict[int, _Track] = {}
         self.pending: list[TriggerEvent] = []
+        self.episodes: dict[int, _Episode] = {}
 
     def update(self, frame: dict) -> list[TriggerEvent]:
         """Feed one processed frame (as produced by Perception.run). Returns events ready to send."""
+        if self.mode == "episode":
+            return self._update_episode(frame)
         t, idx = frame["t"], frame["idx"]
         events = []
         boxes = {p["tid"]: p["box"] for p in frame["persons"]}
@@ -113,7 +145,87 @@ class TriggerFilter:
     def flush(self) -> list[TriggerEvent]:
         """End of video: emit held events with whatever frames came after the trigger."""
         events, self.pending = self.pending, []
+        events += [self._close(tid, ep) for tid, ep in self.episodes.items()]
+        self.episodes = {}
         return events
+
+    def _update_episode(self, frame: dict) -> list[TriggerEvent]:
+        t, idx = frame["t"], frame["idx"]
+        for p in frame["persons"]:
+            tid = p["tid"]
+            tr = self.tracks.get(tid)
+            if tr is None:
+                tr = self.tracks[tid] = _Track(first_t=t, last_t=t)
+            tr.last_t = t
+            tr.hist.append((t, idx, p["box"]))
+            while tr.hist and t - tr.hist[0][0] > self.buffer_s:
+                tr.hist.popleft()
+
+            ep = self.episodes.get(tid)
+            if ep:
+                ep.boxes.append((t, idx, p["box"]))
+            reasons = self._cues(tr, p, frame["objects"], t)
+            if not reasons or t - tr.first_t < self.dwell_s:
+                continue
+            if ep is None:
+                ep = self.episodes[tid] = _Episode(start_t=t, last_cue_t=t)
+                ep.boxes = [h for h in tr.hist if h[0] >= t - self.ep_margin]
+            elif t - ep.start_t > self.ep_max:
+                continue  # episode is full; it closes soon and a later cue opens the next one
+            ep.last_cue_t = t
+            ep.cues.append((t, idx, p["box"]))
+            ep.reasons |= set(reasons)
+
+        events = []
+        for tid in [k for k, ep in self.episodes.items()
+                    if t - ep.last_cue_t > self.ep_gap or t - ep.start_t > self.ep_max + self.ep_margin]:
+            events.append(self._close(tid, self.episodes.pop(tid)))
+        for tid in [k for k, v in self.tracks.items() if t - v.last_t > self.buffer_s]:
+            del self.tracks[tid]
+            if tid in self.episodes:
+                events.append(self._close(tid, self.episodes.pop(tid)))
+        return events
+
+    def _close(self, tid: int, ep: _Episode) -> TriggerEvent:
+        """Keyframes: 1 before the first cue, K-2 over the cue span, 1 after.
+
+        Each middle keyframe is the *last* frame of the cue burst nearest to its evenly spaced
+        time: hand_to_body fires while the hand moves in, and the evidence (item held at the body)
+        is where the movement ends.
+        """
+        def nearest(items, ts):
+            return min(items, key=lambda h: abs(h[0] - ts))
+
+        bursts = [[ep.cues[0]]]
+        for c in ep.cues[1:]:
+            if c[0] - bursts[-1][-1][0] > BURST_GAP_S:
+                bursts.append([])
+            bursts[-1].append(c)
+        t0, t1 = ep.cues[0][0], ep.cues[-1][0]
+        n_mid = max(self.k - 2, 1)
+        mids = []
+        for j in range(n_mid):
+            c = nearest(ep.cues, t0 + (t1 - t0) * j / max(n_mid - 1, 1))
+            mids.append(next(b for b in bursts if c in b)[-1])
+        chosen = []
+        for h in sorted([nearest(ep.boxes, t0 - self.ep_margin), *mids, nearest(ep.boxes, t1 + self.ep_margin)],
+                        key=lambda h: h[0]):
+            if all(abs(h[0] - c[0]) >= MIN_KEYFRAME_GAP_S for c in chosen):
+                chosen.append(h)
+        # slots freed by near-duplicates (e.g. the person left right after the last cue) go to the
+        # middle of the largest remaining time gap
+        while len(chosen) < self.k:
+            a, b = max(zip(chosen, chosen[1:]), key=lambda p: p[1][0] - p[0][0], default=(None, None))
+            if a is None or b[0] - a[0] < 2 * MIN_KEYFRAME_GAP_S:
+                break
+            fill = nearest(ep.boxes, (a[0] + b[0]) / 2)
+            if any(fill[1] == c[1] for c in chosen):
+                break
+            chosen = sorted([*chosen, fill], key=lambda h: h[0])
+        keyframes = [(i, b) for _, i, b in chosen]
+        strong = "pickup" in ep.reasons or {"near_object", "hand_to_body"} <= ep.reasons
+        return TriggerEvent(tid, ep.cues[0][1], t0, sorted(ep.reasons), [(i, b) for _, i, b in ep.boxes],
+                            keyframes=keyframes, end_t=t1, strong=strong)
 
     def _trim(self, ev: TriggerEvent, t: float) -> TriggerEvent:
         """Keep only the last buffer_seconds (the idx -> time map is linear per video)."""
