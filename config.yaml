@@ -14,6 +14,8 @@ datasets:
     root: test_youtube        # our own clips: clips.csv + clips/<clip_id>.mp4 (cut from raw/ yt-dlp downloads)
   youtube_raw:
     root: test_youtube/raw    # whole yt-dlp downloads, unedited ("as if from the camera"); labels in raw_labels.csv, default theft
+  store_sim:
+    root: test_youtube/store_sim   # long raw videos run as a store camera (docs/store_sim.md); videos.csv = approx theft counts
   zenodo:
     root: C:/Users/Shahen/Downloads/shoplifting/shoplifting   # zenodo.org/records/10149996 (shoplifting.rar); staged theft, all label 1
 
@@ -71,3 +73,9 @@ trigger:
 test_b:
   stop_on: [CONFIRMED]        # stop calling the VLM for a clip once it is flagged CONFIRMED
   max_calls_per_clip: 0       # 0 = no cap (the per-person cooldown already limits calls)
+
+# Store simulation (scripts/run_store_sim.py): a long video is watched to the end, every alarm counts
+store_sim:
+  trigger_mode: episode       # docs/proposal_event_based_trigger.md
+  stop_per_person_on: [CONFIRMED]   # a person already flagged gets no more calls (one alarm per person)
+  alarm_verdicts: [CONFIRMED, UNCERTAIN]

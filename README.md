@@ -49,6 +49,10 @@ yt-dlp -S "res:360" -f "bv*[ext=mp4][vcodec^=avc1]/b[ext=mp4]" -o "test_youtube/
 
 Every video in `test_youtube/raw/` counts as theft for scoring, unless `test_youtube/raw_labels.csv` (`video_id,label`) says otherwise. Open design questions are in [docs/](docs/).
 
+## Store simulation (long videos, every alarm counts)
+
+Long raw videos in `test_youtube/store_sim/` are run end to end as if from a store camera. The pipeline keeps going after each alarm, and every alarm is then reviewed as correct or false. See [docs/store_sim.md](docs/store_sim.md).
+
 ## Layout
 
 | Path | Purpose |
