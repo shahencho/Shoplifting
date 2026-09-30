@@ -1,0 +1,2 @@
+# One camera per line: name, URL (YouTube live page, RTSP, HTTP/HLS). Lines starting with # are skipped.
+yerevan_rooftop, https://www.youtube.com/watch?v=BQY5LAmDEVM
