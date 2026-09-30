@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire Watch</title>
+<style>
+:root{color-scheme:light;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--muted:#898781;--line:rgba(11,11,11,.12);
+  --accent:#d03b3b;--ok:#0ca30c;--amber:#b87400;--orange:#c4501f;--grey:#898781;--soft:#f0efec}
+@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#0d0d0d;--card:#1a1a19;--ink:#fff;--ink2:#c3c2b7;
+  --line:rgba(255,255,255,.12);--amber:#fab219;--orange:#ec835a;--soft:#262624}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.45 system-ui,-apple-system,"Segoe UI",sans-serif}
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:12px;padding:10px 16px;background:var(--card);
+  border-bottom:1px solid var(--line)}
+header b{font-size:16px}header .sp{flex:1}
+.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--grey);margin-right:6px}
+.dot.ok{background:var(--ok)}.dot.bad{background:var(--accent)}.dot.wait{background:var(--amber)}
+a,button.link{color:var(--ink2);background:none;border:0;font:inherit;cursor:pointer;padding:0;text-decoration:none}
+main{max-width:1080px;margin:0 auto;padding:16px}
+.card{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:18px;margin-bottom:14px}
+h2{font-size:18px;margin:0 0 4px}.sub{color:var(--ink2);font-size:14px;margin:0 0 14px}
+.steps{display:flex;gap:6px;margin-bottom:14px;font-size:13px;color:var(--muted)}.steps span.on{color:var(--ink);font-weight:600}
+label{display:block;font-size:13px;color:var(--ink2);margin:10px 0 4px}
+input,select{width:100%;font:inherit;padding:9px 11px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.or{margin:14px 0 4px;color:var(--muted);font-size:13px}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:16px}
+button.b{font:inherit;font-weight:600;padding:9px 16px;border-radius:8px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+button.primary{background:var(--accent);border-color:var(--accent);color:#fff}
+button:disabled{opacity:.5;cursor:default}
+.msg{font-size:14px;margin-top:10px}.msg.bad{color:var(--accent)}.msg.good{color:var(--ok)}
+.snap{max-width:100%;border-radius:8px;margin-top:10px;display:block}
+.det{display:flex;align-items:center;justify-content:space-between;padding:12px 0;border-bottom:1px solid var(--line)}
+.det:last-child{border:0}.det .soon{color:var(--muted)}.det small{display:block;color:var(--muted);font-size:12px}
+.sw{position:relative;width:46px;height:26px;flex:none}.sw input{opacity:0;width:0;height:0}
+.sw span{position:absolute;inset:0;background:var(--line);border-radius:13px;transition:.15s}
+.sw span:before{content:"";position:absolute;width:20px;height:20px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.sw input:checked+span{background:var(--ok)}.sw input:checked+span:before{transform:translateX(20px)}
+.qr{display:flex;gap:18px;align-items:center;flex-wrap:wrap}.qr img{width:180px;height:180px;background:#fff;border-radius:8px;padding:6px}
+.live{display:grid;grid-template-columns:minmax(0,3fr) minmax(0,2fr);gap:14px}
+@media (max-width:820px){.live{grid-template-columns:1fr}.grid2{grid-template-columns:1fr}}
+.video{position:relative;background:#000;border-radius:10px;overflow:hidden;aspect-ratio:16/9;display:grid;place-items:center}
+.video img{width:100%;height:100%;object-fit:contain}.video .ph{color:#aaa;font-size:14px;position:absolute}
+.statusline{display:flex;flex-wrap:wrap;gap:6px 16px;font-size:13px;color:var(--ink2);margin-top:8px}
+.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:12px}
+.counters div{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:10px;text-align:center}
+.counters b{display:block;font-size:24px;font-variant-numeric:tabular-nums}.counters span{font-size:12px;color:var(--ink2)}
+.events{display:flex;flex-direction:column;gap:10px}
+.ev{background:var(--card);border:1px solid var(--line);border-left:5px solid var(--grey);border-radius:10px;padding:10px;
+  display:grid;grid-template-columns:120px 1fr;gap:10px}
+.ev.checking{border-left-color:var(--amber)}.ev.confirmed{border-left-color:var(--accent)}.ev.possible{border-left-color:var(--orange)}
+.ev img{width:120px;border-radius:6px;cursor:zoom-in}
+.ev .st{font-weight:700}.ev.checking .st{color:var(--amber)}.ev.confirmed .st{color:var(--accent)}
+.ev.possible .st{color:var(--orange)}.ev.dismissed .st{color:var(--grey)}
+.ev .meta{font-size:12px;color:var(--muted)}.ev .why{font-size:13px;margin:3px 0}
+.ev .acts{display:flex;gap:8px;flex-wrap:wrap;margin-top:6px}
+.ev .acts button{font:inherit;font-size:12px;padding:4px 10px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--ink);cursor:pointer}
+.ev .acts button.on{background:var(--ink);color:var(--bg)}
+.ev video{width:100%;border-radius:6px;margin-top:6px;grid-column:1/-1}
+.empty{color:var(--muted);font-size:14px;text-align:center;padding:20px}
+dialog{border:0;padding:0;background:transparent}dialog img{max-width:95vw;max-height:90vh;border-radius:8px}
+dialog::backdrop{background:rgba(0,0,0,.85)}
+</style></head><body>
+<header><b>🔥 Fire Watch</b><span id=hdrcam class=muted></span><span class=sp></span>
+  <span id=hdrstate><span class=dot></span></span>
+  <a href="#camera">Settings</a><button class=link id=logout>Log out</button></header>
+<main id=app></main>
+<dialog id=zoom><img alt=""></dialog>
+
+<template id=t-camera><div class=card>
+  <div class=steps><span class=on>1 Camera</span>›<span>2 Detections</span>›<span>3 Alerts</span></div>
+  <h2>Camera</h2><p class=sub>Connect one camera on this network.</p>
+  <label for=c-name>Camera name</label><input id=c-name placeholder="Server room">
+  <div class=grid2>
+    <div><label for=c-brand>Brand</label><select id=c-brand><option value=hikvision>Hikvision</option>
+      <option value=dahua>Dahua</option><option value=other>Other (paste URL below)</option></select></div>
+    <div><label for=c-ip>IP address</label><input id=c-ip placeholder="192.168.1.64" inputmode=decimal></div>
+    <div><label for=c-user>Username</label><input id=c-user autocomplete=off></div>
+    <div><label for=c-pass>Password</label><input id=c-pass type=password autocomplete=new-password></div>
+    <div><label for=c-ch>Channel</label><input id=c-ch value=1 inputmode=numeric></div>
+  </div>
+  <div class=or>or paste a full stream URL (RTSP, HTTP, HLS)</div>
+  <input id=c-url placeholder="rtsp://user:pass@192.168.1.64:554/...">
+  <div class=btns><button class=b id=c-test>Test connection</button><button class="b primary" id=c-save>Save</button></div>
+  <div class=msg id=c-msg></div><img class=snap id=c-snap alt="" hidden>
+</div></template>
+
+<template id=t-detections><div class=card>
+  <div class=steps><span>1 Camera</span>›<span class=on>2 Detections</span>›<span>3 Alerts</span></div>
+  <h2>Detections</h2><p class=sub>What this camera watches for.</p>
+  <div class=det><div>🔥 Fire<small>Open flames</small></div><label class=sw><input type=checkbox id=d-fire><span></span></label></div>
+  <div class=det><div>💨 Smoke<small>Smoke from something burning</small></div><label class=sw><input type=checkbox id=d-smoke><span></span></label></div>
+  <div class=det><div class=soon>🔒 Intrusion after hours<small>Coming soon</small></div></div>
+  <div class=det><div class=soon>🔒 Loitering near equipment<small>Coming soon</small></div></div>
+  <div class=det><div class=soon>🔒 Theft / concealment<small>Coming soon</small></div></div>
+  <div class=det><div class=soon>🔒 Crowd / unusual gathering<small>Coming soon</small></div></div>
+  <div class=det><div class=soon>🔒 Camera tampering<small>Coming soon</small></div></div>
+  <div class=btns><button class="b primary" id=d-next>Continue</button></div>
+</div></template>
+
+<template id=t-alerts><div class=card>
+  <div class=steps><span>1 Camera</span>›<span>2 Detections</span>›<span class=on>3 Alerts</span></div>
+  <h2>Alerts</h2><p class=sub>Scan the code with your phone, open the bot in Telegram and press <b>Start</b>.</p>
+  <div class=qr><img id=a-qr alt="Telegram QR code"><div><a id=a-link target=_blank></a>
+    <p id=a-linked class=msg></p></div></div>
+  <div class=btns><button class=b id=a-test>Send test alert</button><button class="b primary" id=a-done>Finish</button></div>
+  <div class=msg id=a-msg></div>
+</div></template>
+
+<template id=t-live><div class=live>
+  <div><div class=video><img id=l-img alt="live view"><span class=ph id=l-ph>Connecting…</span></div>
+    <div class=statusline id=l-status></div></div>
+  <div><div class=counters><div><b id=n-events>0</b><span>Events</span></div><div><b id=n-alerts>0</b><span>Alerts</span></div>
+    <div><b id=n-dismissed>0</b><span>Dismissed</span></div></div>
+    <div class=events id=l-events></div></div>
+</div></template>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (url, body) => {
+  const r = await fetch(url, body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  if (r.status === 401){ location.reload(); throw new Error("login"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+let S = null, screen = null, timer = null;
+
+const STATE = {checking:["Checking…","AI is looking at it"], confirmed:["Fire confirmed",""], possible:["Possible fire",""],
+               dismissed:["Dismissed","false alarm, no alert sent"], unverified:["Alert (not verified)",""]};
+const CAMSTATE = {ok:["ok","● Monitoring"], connecting:["wait","Connecting…"], offline:["bad","Camera offline"],
+                  not_configured:["", "No camera"], ended:["", "Video ended"], stopped:["", "Stopped"]};
+
+async function refresh(){
+  try { S = await api("/api/state"); } catch(e){ return; }
+  const st = S.status, [cls, txt] = CAMSTATE[st.state] || ["", st.state];
+  $("#hdrstate").innerHTML = `<span class="dot ${cls}"></span>${txt}`;
+  $("#hdrcam").textContent = st.camera && st.state !== "not_configured" ? "· " + st.camera : "";
+  if (screen === "live") drawLive();
+  if (screen === "alerts") drawLinked();
+}
+
+function show(name){
+  screen = name;
+  const app = $("#app");
+  app.innerHTML = ""; app.appendChild($("#t-" + name).content.cloneNode(true));
+  ({camera:initCamera, detections:initDetections, alerts:initAlerts, live:initLive})[name]();
+}
+
+function route(){
+  const h = location.hash.slice(1);
+  if (["camera","detections","alerts","live"].includes(h)) return show(h);
+  location.hash = S && S.status.setup_done ? "live" : "camera";
+}
+
+// --- 1. camera ---
+function camBody(){ return {name:$("#c-name").value, brand:$("#c-brand").value, ip:$("#c-ip").value, user:$("#c-user").value,
+  password:$("#c-pass").value, channel:$("#c-ch").value, url:$("#c-url").value}; }
+function initCamera(){
+  const c = S.camera || {};
+  $("#c-name").value = c.name || ""; $("#c-brand").value = c.brand || "hikvision"; $("#c-ip").value = c.ip || "";
+  $("#c-user").value = c.user || ""; $("#c-ch").value = c.channel || "1"; $("#c-url").value = c.url || "";
+  if (c.has_password) $("#c-pass").placeholder = "saved (leave empty to keep)";
+  const msg = (t, ok) => { $("#c-msg").textContent = t; $("#c-msg").className = "msg " + (ok ? "good" : "bad"); };
+  $("#c-test").onclick = async () => {
+    $("#c-test").disabled = true; msg("Connecting to the camera…", true); $("#c-snap").hidden = true;
+    try { const r = await api("/api/camera/test", camBody()); msg(r.message, r.ok);
+          if (r.image){ $("#c-snap").src = r.image; $("#c-snap").hidden = false; } }
+    catch(e){ msg(e.message, false); }
+    $("#c-test").disabled = false;
+  };
+  $("#c-save").onclick = async () => {
+    if (!$("#c-name").value.trim()) return msg("Give the camera a name", false);
+    try { await api("/api/camera", camBody()); await refresh(); location.hash = S.status.setup_done ? "live" : "detections"; }
+    catch(e){ msg(e.message, false); }
+  };
+}
+
+// --- 2. detections ---
+function initDetections(){
+  $("#d-fire").checked = S.status.detections.fire; $("#d-smoke").checked = S.status.detections.smoke;
+  for (const k of ["fire","smoke"]) $("#d-" + k).onchange = ev => api("/api/detections", {[k]: ev.target.checked});
+  $("#d-next").onclick = () => location.hash = S.status.setup_done ? "live" : "alerts";
+}
+
+// --- 3. alerts ---
+function drawLinked(){
+  const t = S.telegram, el = $("#a-linked");
+  if (!el) return;
+  if (!t.enabled){ el.textContent = "Telegram bot is not configured on the server (TELEGRAM_BOT_TOKEN)."; el.className = "msg bad"; return; }
+  el.textContent = t.chats.length ? "✅ Linked as " + t.chats.join(", ") : "Waiting for Start…";
+  el.className = "msg " + (t.chats.length ? "good" : "");
+}
+function initAlerts(){
+  const t = S.telegram;
+  if (t.enabled && t.link){ $("#a-qr").src = "/api/telegram/qr.png"; $("#a-link").href = t.link; $("#a-link").textContent = t.link; }
+  else $("#a-qr").hidden = true;
+  drawLinked();
+  const msg = (x, ok) => { $("#a-msg").textContent = x; $("#a-msg").className = "msg " + (ok ? "good" : "bad"); };
+  $("#a-test").onclick = async () => { try { await api("/api/telegram/test", {}); msg("Test alert sent. Check your phone.", true); }
+                                       catch(e){ msg(e.message, false); } };
+  $("#a-done").onclick = async () => { await api("/api/setup_done", {}); await refresh(); location.hash = "live"; };
+}
+
+// --- 4. live + events ---
+function initLive(){
+  const img = $("#l-img");
+  img.onload = () => $("#l-ph").hidden = true;
+  img.onerror = () => { $("#l-ph").hidden = false; setTimeout(() => img.src = "/live.mjpg?" + Date.now(), 3000); };
+  img.src = "/live.mjpg";
+  drawLive();
+}
+const openEv = new Set();
+function drawLive(){
+  const st = S.status;
+  if (!$("#l-events")) return;
+  $("#l-ph").textContent = st.state === "not_configured" ? "No camera yet: open Settings" :
+                           st.state === "offline" ? "Camera offline, reconnecting…" : "Connecting…";
+  $("#l-status").innerHTML = [
+    `Stream ${st.fps ? st.fps + " fps" : "–"}`, `Checks ${st.checks}`, `Detector ${st.detector_ms} ms`,
+    `AI check ${esc(st.qwen)}`, st.reconnects ? `Reconnects ${st.reconnects}` : "", st.offline_s ? `Offline ${st.offline_s} s` : "",
+    `Watching: ${["fire","smoke"].filter(k => st.detections[k]).join(" + ") || "nothing"}`
+  ].filter(Boolean).map(esc).join(" · ");
+  $("#n-events").textContent = st.counters.events; $("#n-alerts").textContent = st.counters.alerts;
+  $("#n-dismissed").textContent = st.counters.dismissed;
+  const box = $("#l-events");
+  const sig = JSON.stringify([S.events, [...openEv]]);
+  if (box.dataset.sig === sig) return;          // unchanged: don't restart an open clip
+  box.dataset.sig = sig;
+  if (!S.events.length){ box.innerHTML = `<div class=empty>No events yet. Fire or smoke on camera appears here.</div>`; return; }
+  box.innerHTML = S.events.map(e => {
+    let [title, note] = STATE[e.state] || [e.state, ""];
+    if (e.state === "confirmed" && e.kind === "still") title = "Fire still detected";
+    if (e.upgraded_t !== null && e.state === "confirmed") note = "upgraded from possible fire";
+    if (e.state === "possible") note = e.verdict === "UNCERTAIN" ? "AI not sure, alert sent" : "not verified, alert sent";
+    const time = (e.wall_time || "").slice(11) || `t=${e.t.toFixed(0)}s`;
+    const f = e.files || {};
+    return `<div class="ev ${e.state}">
+      <img src="${f.snapshot ? "/files/" + esc(f.snapshot) : ""}" alt="" data-zoom>
+      <div><span class=st>${esc(title)}</span> <span class=meta>· ${esc(e.box.cls)} · ${esc(time)}</span>
+        ${note ? `<div class=meta>${esc(note)}</div>` : ""}
+        ${e.reason ? `<div class=why>“${esc(e.reason)}”</div>` : ""}
+        <div class=acts>
+          ${f.clip ? `<button data-clip=${e.n}>${openEv.has(e.n) ? "Hide clip" : "▶ Clip"}</button>` : ""}
+          ${e.state !== "checking" ? `<button data-fb=real data-n=${e.n} class="${e.feedback === "real" ? "on" : ""}">Real</button>
+          <button data-fb=false data-n=${e.n} class="${e.feedback === "false" ? "on" : ""}">False alarm</button>` : ""}
+        </div></div>
+      ${f.clip && openEv.has(e.n) ? `<video src="/files/${esc(f.clip)}" controls autoplay muted playsinline></video>` : ""}
+    </div>`;
+  }).join("");
+}
+
+document.addEventListener("click", async ev => {
+  const t = ev.target;
+  if (t.dataset.clip){ const n = +t.dataset.clip; openEv.has(n) ? openEv.delete(n) : openEv.add(n); drawLive(); }
+  if (t.dataset.fb){ const e = S.events.find(x => x.n === +t.dataset.n), v = e.feedback === t.dataset.fb ? "" : t.dataset.fb;
+    await api(`/api/events/${t.dataset.n}/feedback`, {value: v}); await refresh(); }
+  if (t.dataset.zoom !== undefined && t.src){ $("#zoom img").src = t.src; $("#zoom").showModal(); }
+  if (t.closest("#zoom")) $("#zoom").close();
+});
+$("#logout").onclick = async () => { await api("/api/logout", {}); location.reload(); };
+addEventListener("hashchange", route);
+(async () => { await refresh(); route(); timer = setInterval(refresh, 2000); })();
+</script></body></html>

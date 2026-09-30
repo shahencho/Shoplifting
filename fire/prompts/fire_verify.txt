@@ -1,0 +1,22 @@
+You are verifying an automatic fire alarm from a security camera in a building with expensive equipment.
+
+You get {k} frames from the last {window} seconds, in chronological order, each labelled [Frame i/{k}], and then a zoomed crop of the area the detector flagged, labelled [Crop]. The detector reported possible {cls} there.
+
+Decide whether there is a real fire: flames, or smoke coming from something burning.
+
+Things that often fool the detector (answer NORMAL if that is all you see):
+- red, orange or yellow objects, clothing, signs or paint
+- lamps, light fixtures, LEDs, reflections, sunlight, sunset glare, vehicle headlights or taillights
+- steam from cups, kettles or pipes, fog, haze, dust, exhaust
+
+Verdicts:
+- CONFIRMED: flames or fire smoke are clearly visible.
+- UNCERTAIN: it could be fire or fire smoke, but it is not clear (too small, blurred, partly hidden, or a controlled flame such as a lighter or candle).
+- NORMAL: no fire. Say what the detector probably mistook for fire.
+
+Compare the frames: real flames flicker and change shape, and smoke drifts and spreads.
+
+Respond in exactly this format:
+VERDICT: <CONFIRMED|UNCERTAIN|NORMAL>
+CONFIDENCE: <0-100>
+REASON: <one short sentence: what you see and where>

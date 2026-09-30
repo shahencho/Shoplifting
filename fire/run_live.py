@@ -1,29 +1,25 @@
-"""Fire demo entry point. Step 0: read a source, detect fire/smoke, draw boxes, log detections.
-
-The persistence filter, Qwen verification and Telegram alerts are added in steps 2-3.
+"""Fire demo entry point: camera -> YOLO -> persistence filter -> Qwen -> Telegram, with the dashboard.
 
 Usage (from the repo root, with the fire venv):
-    fire\\.venv\\Scripts\\python -m fire.run_live --source fire/data/street_car_fire_cctv.mp4
-    fire\\.venv\\Scripts\\python -m fire.run_live --source yerevan_rooftop --show --duration 120
-    fire\\.venv\\Scripts\\python -m fire.run_live --source rtsp://user:pass@192.168.1.64:554/Streaming/Channels/102
+    fire\\.venv\\Scripts\\python -m fire.run_live                        # dashboard on :8000, camera from the setup screens
+    fire\\.venv\\Scripts\\python -m fire.run_live --source fire/data/BJ9ng9L1CA0.mp4
+    fire\\.venv\\Scripts\\python -m fire.run_live --source yerevan_rooftop --no-web
+    fire\\.venv\\Scripts\\python -m fire.run_live --source "rtsp://user:pass@192.168.1.64:554/Streaming/Channels/102"
 
---source is a file, any stream URL, or a camera name from fire/cameras.txt.
-Output: fire/outputs/live/<name>_<time>/  annotated.mp4 (checked frames), detections.jsonl, first_detection.jpg
+--source: a video file (played at camera speed unless --fast), any stream URL, or a name from fire/cameras.txt.
+          Without it the camera saved in the dashboard setup is used.
+--no-web: console only; --no-qwen: every event is an unverified alert (no API calls).
+Secrets in fire/.env: VLM_API_KEY, TELEGRAM_BOT_TOKEN, DEMO_USER / DEMO_PASSWORD.
+Output: fire/outputs/live/<camera>_<time>/events/E001/ (snapshot, crop, clip, event.json) + events.jsonl
 """
 from __future__ import annotations
 
 import argparse
-import json
 import time
-from datetime import datetime
 from pathlib import Path
 
-import cv2
 import yaml
-
-from fire.detector import FireDetector
-from fire.evidence import draw_boxes
-from fire.stream import Stream
+from dotenv import load_dotenv
 
 FIRE = Path(__file__).resolve().parent
 ROOT = FIRE.parent
@@ -44,93 +40,65 @@ def load_cameras(path: Path = FIRE / "cameras.txt") -> dict[str, str]:
     return cams
 
 
-def source_name(source: str) -> str:
-    p = Path(source)
-    if p.is_file():
-        return p.stem
-    return "stream"
-
-
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--source", required=True, help="video file, stream URL, or a name from fire/cameras.txt")
+    ap.add_argument("--source", help="video file, stream URL, or a name from fire/cameras.txt (default: saved camera)")
+    ap.add_argument("--name", help="camera name shown in alerts (default: from the source)")
     ap.add_argument("--config", default=str(FIRE / "config.yaml"))
-    ap.add_argument("--duration", type=float, default=0, help="stop after N seconds of video (0 = until the end)")
-    ap.add_argument("--show", action="store_true", help="show a live window with boxes (q to quit)")
-    ap.add_argument("--realtime", action="store_true", help="files: play at camera speed instead of max speed")
+    ap.add_argument("--no-web", action="store_true", help="console only, no dashboard")
+    ap.add_argument("--host", default="0.0.0.0")
+    ap.add_argument("--port", type=int, default=8000)
+    ap.add_argument("--no-qwen", action="store_true", help="skip Qwen: every event is an unverified alert")
+    ap.add_argument("--fast", action="store_true", help="files: process as fast as possible instead of camera speed")
     args = ap.parse_args()
+
+    load_dotenv(FIRE / ".env")
+    from fire.alerts.telegram import from_env
+    from fire.runtime import Runtime
 
     cfg = load_config(Path(args.config))
     cams = load_cameras()
-    name, source = (args.source, cams[args.source]) if args.source in cams else (source_name(args.source), args.source)
+    source, name = args.source, args.name
+    if source in cams:
+        name, source = name or source, cams[source]
+    elif source and Path(source).is_file():
+        name = name or Path(source).stem
+    elif source:
+        name = name or "camera"
 
-    weights = ROOT / cfg["model"]["weights"]
-    if not weights.exists():
-        raise SystemExit(f"Weights not found: {weights}\nRun: fire\\.venv\\Scripts\\python fire/models/download.py")
-    det = FireDetector(str(weights), cfg["detections"], imgsz=cfg["model"]["imgsz"], device=cfg["model"]["device"])
-    sc = cfg["stream"]
-    stream = Stream(source, max_height=sc["max_height"], buffer_s=sc["buffer_s"], buffer_fps=sc["buffer_fps"],
-                    reconnect_backoff_s=sc["reconnect_backoff_s"], max_lag_s=sc["max_lag_s"],
-                    realtime=args.realtime)
-    checks_per_s = cfg["temporal"]["checks_per_s"]
+    rt = Runtime(cfg, use_qwen=not args.no_qwen, realtime_files=not args.fast)
+    rt.name_override = name
+    rt.telegram = from_env(cfg, camera=rt.camera_name)
+    if rt.telegram:
+        rt.notifier = rt.telegram
+        rt.telegram.start_linking()
+        print(f"[telegram] bot {rt.telegram.link}  linked: {[c['name'] for c in rt.telegram.chats] or 'nobody yet'}")
+    print(f"Qwen: {cfg['verify']['model'] if not args.no_qwen else 'off'} (timeout {cfg['verify']['timeout_s']} s)  "
+          f"detections: {rt.enabled}")
+    rt.start(source)
 
-    out_dir = FIRE / "outputs" / "live" / f"{name}_{datetime.now():%Y%m%d_%H%M%S}"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    log = (out_dir / "detections.jsonl").open("w", encoding="utf-8")
-    writer = None
-    n_checks = n_hits = 0
-    det_ms: list[float] = []
-    first_hit_t = None
-    wall0 = time.monotonic()
-    print(f"Source: {name} ({'live' if stream.live else 'file'})  output: {out_dir.relative_to(ROOT)}")
+    if args.no_web:
+        try:
+            while rt.running:
+                time.sleep(0.5)
+        except KeyboardInterrupt:
+            pass
+        rt.stop()
+    else:
+        import uvicorn
 
-    try:
-        for idx, t, frame in stream.frames(checks_per_s):
-            if args.duration and t > args.duration:
-                break
-            t0 = time.perf_counter()
-            boxes = det.detect_fire(frame)
-            det_ms.append((time.perf_counter() - t0) * 1000)
-            n_checks += 1
-            shown = draw_boxes(frame, boxes)
-            if writer is None:
-                h, w = frame.shape[:2]
-                writer = cv2.VideoWriter(str(out_dir / "annotated.mp4"), cv2.VideoWriter_fourcc(*"avc1"),
-                                         checks_per_s, (w, h))
-                print(f"Stream: {w}x{h}, {stream.fps:.0f} fps declared, {checks_per_s} checks/s")
-            writer.write(shown)
-            if boxes:
-                n_hits += 1
-                log.write(json.dumps({"idx": idx, "t": round(t, 2),
-                                      "boxes": [{"cls": b.cls, "conf": b.conf, "xyxy": [round(v) for v in b.xyxy]}
-                                                for b in boxes]}) + "\n")
-                if first_hit_t is None:
-                    first_hit_t = t
-                    cv2.imwrite(str(out_dir / "first_detection.jpg"), shown)
-                    print(f"First detection at t={t:.1f} s: " + ", ".join(f"{b.cls} {b.conf:.2f}" for b in boxes))
-            if args.show:
-                cv2.imshow(f"fire: {name}", shown)
-                if cv2.waitKey(1) & 0xFF == ord("q"):
-                    break
-            if n_checks % (checks_per_s * 30) == 0:
-                print(f"  t={t:6.0f} s  checks={n_checks}  with fire/smoke={n_hits}  "
-                      f"detector {sum(det_ms[-150:]) / len(det_ms[-150:]):.0f} ms  stream={stream.status}")
-    except KeyboardInterrupt:
-        pass
-    finally:
-        stream.close()
-        log.close()
-        if writer:
-            writer.release()
-        if args.show:
-            cv2.destroyAllWindows()
+        from fire.web.app import create_app
 
-    wall = time.monotonic() - wall0
-    print(f"\nChecks: {n_checks} in {wall:.0f} s wall  |  with fire/smoke: {n_hits}  |  "
-          f"detector median {sorted(det_ms)[len(det_ms) // 2] if det_ms else 0:.0f} ms/frame")
-    if first_hit_t is not None:
-        print(f"First detection: t={first_hit_t:.1f} s -> {(out_dir / 'first_detection.jpg').relative_to(ROOT)}")
-    print(f"Saved: {out_dir.relative_to(ROOT)}")
+        print(f"Dashboard: http://localhost:{args.port}  (same network: http://<this-computer-ip>:{args.port})")
+        uvicorn.run(create_app(rt), host=args.host, port=args.port, log_level="warning")
+        rt.stop()
+
+    if rt.telegram:
+        rt.telegram.flush()
+    if rt.pipeline:
+        evs = rt.pipeline.events
+        print(f"\nEvents: {len(evs)}  " + "  ".join(f"E{e.n} t={e.t:.0f}s {e.state}" for e in evs))
+        print(f"Saved: {rt.out_dir.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

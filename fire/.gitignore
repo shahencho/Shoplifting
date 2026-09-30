@@ -5,3 +5,4 @@ data/*
 !data/labels.csv
 outputs/
 .env
+state/

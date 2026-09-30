@@ -55,9 +55,12 @@ Shoplifting/
 │   ├── events.py                 # alerts, cooldowns, "still detected" (Qwen verdicts plug in, step 3)
 │   ├── verify.py                 # Qwen call + parse (copied from src/vlm.py, adapted)
 │   ├── evidence.py               # snapshot + clip, frozen at trigger time (5 s before + 3 s after)
-│   ├── alerts/telegram.py        # bot: /start linking, sendPhoto, sendVideo
-│   ├── web/                      # demo dashboard (see §7)
-│   ├── run_live.py               # entry point: --source rtsp://... or a video file
+│   ├── pipeline.py               # stream → detector → filter → events → evidence + Qwen → notifier (live and offline)
+│   ├── runtime.py                # live: one camera, settings, pipeline thread, offline watchdog
+│   ├── alerts/telegram.py        # bot: /start linking, sendPhoto, sendVideo, offline notices
+│   ├── web/                      # demo dashboard (see §7): app.py, index.html, login.html
+│   ├── state/                    # settings.json, telegram.json (gitignored)
+│   ├── run_live.py               # entry point: dashboard + camera; --source file / URL / cameras.txt name
 │   ├── eval_offline.py           # technical test: cached detections, filter replay, settings sweep
 │   ├── eval_report.py            # report.html for it (internal, not the demo UI)
 │   ├── tests/

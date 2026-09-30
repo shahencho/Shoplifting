@@ -3,9 +3,14 @@
 The detector runs once per video and its detections are cached (at a low confidence), so trying other
 filter settings (--window, --ratio, --iou, --conf) takes seconds. The report also has a settings sweep.
 
+Without --qwen every event counts as an alert ("unverified"), which shows what the detector + filter alone do.
+With --qwen the full pipeline runs (same code as live): evidence, Qwen verdicts (latency replayed in video
+time), cooldowns, upgrades, clips; --telegram also sends the alerts to the linked chats.
+
 Usage (from the repo root, with the fire venv):
     fire\\.venv\\Scripts\\python -m fire.eval_offline                                  # every video in fire/data
     fire\\.venv\\Scripts\\python -m fire.eval_offline fire/data/BJ9ng9L1CA0.mp4 --ratio 0.5 --tag r05
+    fire\\.venv\\Scripts\\python -m fire.eval_offline fire/data/BJ9ng9L1CA0.mp4 --qwen [--telegram]
 
 Output: fire/outputs/eval/<time>_<tag>/report.html (+ snapshots/, summary.json)
 Cache:  fire/outputs/eval/cache/<video>__<weights>_i<imgsz>_c<checks>/ (checks.jsonl, annotated.mp4, meta.json)
@@ -22,15 +27,21 @@ from datetime import datetime
 from itertools import product
 from pathlib import Path
 
-import cv2
+import copy
 
+import cv2
+from dotenv import load_dotenv
+
+from fire.alerts import Notifier
 from fire.detector import Box, FireDetector
 from fire.eval_report import write_report
-from fire.evidence import draw_boxes
-from fire.events import EventManager
+from fire.evidence import draw_boxes, video_writer
+from fire.events import ALERT_STATES, EventManager
+from fire.pipeline import Pipeline
 from fire.run_live import load_config
 from fire.stream import Stream
 from fire.temporal import PersistenceFilter
+from fire.verify import SyncVerifier, Verdict, Verifier
 
 FIRE = Path(__file__).resolve().parent
 ROOT = FIRE.parent
@@ -86,8 +97,7 @@ def detect_cached(video: Path, cfg: dict, det_holder: dict) -> tuple[dict, list[
             scale = min(1.0, 720 / h)
             size = (int(w * scale) // 2 * 2, int(h * scale) // 2 * 2)
             step = max(1, round(stream.fps / cps))
-            writer = cv2.VideoWriter(str(cdir / "annotated.mp4"), cv2.VideoWriter_fourcc(*"avc1"),
-                                     stream.fps / step, size)    # annotated time == video time
+            writer = video_writer(cdir / "annotated.mp4", stream.fps / step, size)   # annotated time == video time
         shown = draw_boxes(frame, [b for b in boxes if b.conf >= draw_conf.get(b.cls, 1)])
         writer.write(cv2.resize(shown, size) if shown.shape[1] != size[0] else shown)
     writer.release()
@@ -106,27 +116,57 @@ def boxes_at(check: dict, conf: dict[str, float]) -> list[Box]:
     return [Box(c, p, tuple(xy)) for c, p, *xy in check["boxes"] if c in conf and p >= conf[c]]
 
 
+UNVERIFIED = Verdict("UNVERIFIED", 0, "Qwen not used", "", 0.0)
+
+
 def replay(checks: list[dict], conf: dict, window_s: float, min_ratio: float, iou: float,
            after_alert_s: float) -> tuple[list[dict], list]:
+    """Detector + filter + cooldowns only: every event is an alert, answered at once."""
     f = PersistenceFilter(window_s, min_ratio, iou)
-    em = EventManager(after_alert_s)
+    em = EventManager(after_alert_s, iou_thr=iou)
     rows = []
     for c in checks:
         boxes = boxes_at(c, conf)
         p = f.update(c["t"], boxes)
-        em.update(c["idx"], p, boxes)
+        if act := em.on_check(c["t"], c["idx"], p, boxes):
+            em.on_verdict(act, UNVERIFIED, c["t"])
         rows.append({"t": c["t"], "ratio": round(p.ratio, 3), "passed": p.passed})
     return rows, em.events
 
 
+def run_pipeline(video: Path, checks: list[dict], cfg: dict, out: Path, notifier) -> tuple[list[dict], list, dict]:
+    """Full pipeline on a file, detections from the cache, Qwen for real."""
+    by_idx = {c["idx"]: c for c in checks}
+    conf_all = {c: 0.0 for c in cfg["detections"]}      # the pipeline applies the real thresholds
+    rows = []
+    sc, vc = cfg["stream"], cfg["verify"]
+    verifier = SyncVerifier(Verifier(vc["model"], timeout_s=vc["timeout_s"], max_tokens=vc.get("max_tokens", 8000),
+                                     window_s=cfg["temporal"]["window_s"]))
+    stream = Stream(str(video), buffer_s=sc["buffer_s"], buffer_fps=sc["buffer_fps"])
+    pipe = Pipeline(cfg, stream, verifier=verifier, notifier=notifier, out_dir=out, simulate_latency=True,
+                    on_frame=lambda fr, bx, t, p: rows.append({"t": t, "ratio": round(p.ratio, 3), "passed": p.passed}),
+                    log=lambda m: print("   ", m, flush=True))
+    pipe.run(boxes_for=lambda idx: boxes_at(by_idx[idx], conf_all) if idx in by_idx else [])
+    return rows, pipe.events, pipe.stats
+
+
 def video_metrics(label: dict, checks: list[dict], conf: dict, events: list) -> dict:
+    """first_alert_s = when the first alert would reach the phone (the verdict time; = trigger without Qwen)."""
     first_det = next((c["t"] for c in checks if boxes_at(c, conf)), None)
     flame, smoke = _num(label.get("flame_visible_s")), _num(label.get("smoke_visible_s"))
-    first_alert = events[0].t if events else None
+    alerts = [e for e in events if e.state in ALERT_STATES]
+    first_alert = round(alerts[0].verdict_t, 2) if alerts else None
+    first_trigger = events[0].t if events else None
     delay = lambda ref: round(first_alert - ref, 1) if first_alert is not None and ref is not None else None
+    calls = [c for e in events for c in e.calls if c["verdict"] != "UNVERIFIED"]
     return {"label": label.get("label", "?"), "smoke_visible_s": smoke, "flame_visible_s": flame,
-            "first_detection_s": first_det, "first_alert_s": first_alert,
-            "delay_vs_flame_s": delay(flame), "delay_vs_smoke_s": delay(smoke), "alerts": len(events),
+            "first_detection_s": first_det, "first_trigger_s": first_trigger, "first_alert_s": first_alert,
+            "delay_vs_flame_s": delay(flame), "delay_vs_smoke_s": delay(smoke), "alerts": len(alerts),
+            "events": len(events), "confirmed": sum(e.state == "confirmed" for e in events),
+            "possible": sum(e.state == "possible" for e in events),
+            "dismissed": sum(e.state == "dismissed" for e in events),
+            "qwen_calls": len(calls), "qwen_cost_usd": round(sum(c["cost_usd"] for c in calls), 4),
+            "qwen_latency_median_s": round(statistics.median(c["latency_s"] for c in calls), 1) if calls else None,
             "checks_with_detection": sum(1 for c in checks if boxes_at(c, conf))}
 
 
@@ -142,7 +182,7 @@ def sweep(videos: list[dict], conf: dict, iou_values: list[float], after_alert_s
                 hit += bool(events)
                 ref = _num(v["label"].get("flame_visible_s"))
                 if events and ref is not None:
-                    delays.append(events[0].t - ref)
+                    delays.append(events[0].verdict_t - ref)
             elif v["label"].get("label") == "normal":
                 neg_alerts += len(events)
                 neg_hours += v["meta"]["duration_s"] / 3600
@@ -161,9 +201,7 @@ def snapshot(video: Path, ev, conf: dict, out: Path) -> None:
     cap.release()
     if not ok:
         return
-    img = draw_boxes(frame, ev.boxes)
-    x1, y1, x2, y2 = map(int, ev.box.xyxy)
-    cv2.rectangle(img, (x1 - 3, y1 - 3), (x2 + 3, y2 + 3), (0, 255, 255), 2)   # the box that triggered
+    img = draw_boxes(frame, ev.boxes, highlight=ev.box)
     scale = min(1.0, 640 / img.shape[1])
     cv2.imwrite(str(out), cv2.resize(img, None, fx=scale, fy=scale), [cv2.IMWRITE_JPEG_QUALITY, 85])
 
@@ -179,7 +217,10 @@ def main() -> None:
     ap.add_argument("--iou", type=float, help="same-area IoU (0 = anywhere)")
     ap.add_argument("--conf", type=float, help="detector confidence for both classes")
     ap.add_argument("--tag", default="", help="name added to the output folder")
+    ap.add_argument("--qwen", action="store_true", help="full pipeline with Qwen verdicts (costs API calls)")
+    ap.add_argument("--telegram", action="store_true", help="with --qwen: also send alerts to the linked Telegram chats")
     args = ap.parse_args()
+    load_dotenv(FIRE / ".env")
 
     cfg = load_config(Path(args.config))
     tc = cfg["temporal"]
@@ -189,37 +230,60 @@ def main() -> None:
     conf = {c: (args.conf if args.conf is not None else d["conf"])
             for c, d in cfg["detections"].items() if d.get("enabled", True)}
     after_alert_s = cfg["cooldown"]["after_alert_s"]
+    run_cfg = copy.deepcopy(cfg)                         # the settings this run actually uses
+    run_cfg["temporal"].update(window_s=window, min_ratio=ratio, iou=iou)
+    for c, v in conf.items():
+        run_cfg["detections"][c]["conf"] = v
+    notifier = Notifier()
+    if args.qwen and args.telegram:
+        from fire.alerts.telegram import from_env
+        notifier = from_env(cfg, camera="offline test", clock=lambda ev: f"video t={ev.verdict_t:.0f}s") or Notifier()
 
     paths = [Path(v) for v in args.videos] or sorted(p for p in DATA.iterdir() if p.suffix.lower() in VIDEO_EXT)
     labels = load_labels()
     run_dir = EVAL / f"{datetime.now():%Y%m%d_%H%M%S}{'_' + args.tag if args.tag else ''}"
     (run_dir / "snapshots").mkdir(parents=True)
-    print(f"Settings: window {window} s, ratio {ratio}, iou {iou}, conf {conf}, cooldown {after_alert_s} s")
+    print(f"Settings: window {window} s, ratio {ratio}, iou {iou}, conf {conf}, cooldown {after_alert_s} s"
+          + (f", Qwen {cfg['verify']['model']}" if args.qwen else ", no Qwen"))
 
     det_holder: dict = {}
     videos = []
     for path in paths:
         meta, checks, cdir = detect_cached(path, cfg, det_holder)
         label = labels.get(path.name, {})
-        rows, events = replay(checks, conf, window, ratio, iou, after_alert_s)
-        for ev in events:
-            snap = run_dir / "snapshots" / f"{path.stem}_A{ev.n}.jpg"
-            snapshot(path, ev, conf, snap)
-            ev.extra["snapshot"] = f"snapshots/{snap.name}"
+        if args.qwen:
+            print(f"  pipeline + Qwen on {path.name} ...", flush=True)
+            rows, events, _ = run_pipeline(path, checks, run_cfg, run_dir / path.stem, notifier)
+            for ev in events:           # paths relative to the report
+                for k in ("snapshot", "crop", "clip"):
+                    if k in ev.files:
+                        ev.files[k] = f"{path.stem}/{ev.files[k]}"
+        else:
+            rows, events = replay(checks, conf, window, ratio, iou, after_alert_s)
+            for ev in events:
+                snap = run_dir / "snapshots" / f"{path.stem}_E{ev.n}.jpg"
+                snapshot(path, ev, conf, snap)
+                ev.files["snapshot"] = f"snapshots/{snap.name}"
         mt = video_metrics(label, checks, conf, events)
         videos.append({"path": path, "meta": meta, "checks": checks, "rows": rows, "events": events,
                        "label": label, "metrics": mt, "cache_dir": cdir})
         fa = "-" if mt["first_alert_s"] is None else f"{mt['first_alert_s']:.1f} s"
         dl = "" if mt["delay_vs_flame_s"] is None else f" ({mt['delay_vs_flame_s']:+.1f} s vs flame)"
-        print(f"  {path.name:32s} {mt['label']:7s} first alert {fa}{dl}, alerts {mt['alerts']}")
+        print(f"  {path.name:32s} {mt['label']:7s} first alert {fa}{dl}, alerts {mt['alerts']}"
+              + (f" (confirmed {mt['confirmed']}, possible {mt['possible']}, dismissed {mt['dismissed']},"
+                 f" Qwen {mt['qwen_calls']} calls ${mt['qwen_cost_usd']:.3f})" if args.qwen else ""))
 
     iou_values = sorted({iou, 0.0}, reverse=True)
     sw = sweep(videos, conf, iou_values, after_alert_s)
     settings = {"window_s": window, "min_ratio": ratio, "iou": iou, "conf": conf, "after_alert_s": after_alert_s,
-                "checks_per_s": tc["checks_per_s"], "weights": cfg["model"]["weights"], "imgsz": cfg["model"]["imgsz"]}
+                "checks_per_s": tc["checks_per_s"], "weights": cfg["model"]["weights"], "imgsz": cfg["model"]["imgsz"],
+                "qwen": cfg["verify"]["model"] if args.qwen else None,
+                "after_dismissed_s": cfg["cooldown"]["after_dismissed_s"]}
     summary = {"settings": settings, "videos": {v["path"].name: v["metrics"] for v in videos}, "sweep": sw}
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     write_report(run_dir / "report.html", settings, videos, sw, labels_path=DATA / "labels.csv")
+    if hasattr(notifier, "flush"):
+        notifier.flush()
     print(f"\nReport: {(run_dir / 'report.html').relative_to(ROOT)}")
 
 
