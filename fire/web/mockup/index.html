@@ -101,6 +101,7 @@ tailwind.config = {
       <span class="font-mono text-xs text-slate-400">Hikvision · 192.168.1.64</span>
     </div>
     <span id="camPill"></span>
+    <span id="demoPill" class="hidden inline-flex items-center h-8 px-3 rounded-full bg-sky-400/10 ring-1 ring-sky-300/25 text-sky-300 text-sm font-medium" title="Public test stream, not the client's camera">Demo<span class="hidden sm:inline">&nbsp;camera</span></span>
     <div class="flex-1"></div>
     <nav class="flex items-center gap-1">
       <a href="#live" data-nav="live" class="navlink" aria-label="Live"><i data-lucide="activity" class="w-4 h-4"></i><span class="hidden sm:inline">Live</span></a>
@@ -158,6 +159,10 @@ tailwind.config = {
 
   <div class="mt-8 grid gap-5 lg:grid-cols-2">
     <form id="camForm" class="card p-5 sm:p-6 space-y-4" onsubmit="return false">
+      <div class="flex gap-3 items-start rounded-xl bg-sky-400/[.07] ring-1 ring-sky-300/25 px-4 py-3 text-sm text-slate-300">
+        <i data-lucide="cctv" class="w-5 h-5 text-sky-300 shrink-0 mt-0.5"></i>
+        <p><b class="text-white">Demo camera.</b> Until you save your camera, the system watches a public street camera in Yerevan (Orbeli str.), so you can try it right away. Fill in your camera below, or paste its stream URL, then Save.</p>
+      </div>
       <div><label class="label" for="c-name">Camera name</label><input id="c-name" class="input" value="Server room"></div>
       <div>
         <span class="label">Brand</span>
@@ -175,8 +180,13 @@ tailwind.config = {
         <div><label class="label" for="c-user">Username</label><input id="c-user" class="input" value="admin" autocomplete="off"></div>
         <div><label class="label" for="c-pass">Password</label><input id="c-pass" class="input" type="password" value="camera-pass" autocomplete="new-password"></div>
       </div>
+      <ul class="space-y-1 text-[13px] text-slate-500 list-disc pl-5 marker:text-slate-600">
+        <li>Use the camera or NVR's own username and password, not the Hik-Connect / EZVIZ / DMSS app login.</li>
+        <li>RTSP must be on in the camera settings. Substream: H.264, stream encryption off.</li>
+        <li>Other brand or a different port? Paste the full stream URL below.</li>
+      </ul>
       <details id="urlDetails" class="group">
-        <summary class="cursor-pointer text-sm text-slate-400 hover:text-white list-none flex items-center gap-1.5"><i data-lucide="chevron-right" class="w-4 h-4"></i>Use a stream URL instead (RTSP, HTTP, HLS)</summary>
+        <summary class="cursor-pointer text-sm text-slate-400 hover:text-white list-none flex items-center gap-1.5"><i data-lucide="chevron-right" class="w-4 h-4"></i>Use a stream URL instead (RTSP, HTTP, HLS, YouTube live)</summary>
         <input id="c-url" class="input font-mono text-sm mt-3" placeholder="rtsp://user:pass@192.168.1.64:554/Streaming/Channels/102">
       </details>
       <div class="grid sm:grid-cols-[auto_1fr] gap-3 pt-2">
@@ -810,6 +820,7 @@ function route() {
   $$('[data-view]').forEach(s => s.classList.toggle('hidden', s.id !== 'view-' + v));
   $('#topbar').classList.toggle('hidden', v === 'login');
   $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === v || (a.dataset.nav === 'camera' && v === 'detections')));
+  $('#demoPill').classList.toggle('hidden', S.setupDone || v === 'login');
   renderDemo(); window.scrollTo(0, 0);
 }
 addEventListener('hashchange', route);
