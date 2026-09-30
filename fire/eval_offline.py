@@ -217,12 +217,18 @@ def main() -> None:
     ap.add_argument("--iou", type=float, help="same-area IoU (0 = anywhere)")
     ap.add_argument("--conf", type=float, help="detector confidence for both classes")
     ap.add_argument("--tag", default="", help="name added to the output folder")
+    ap.add_argument("--weights", help="other model weights (e.g. fire/models/candidates/x.pt); cached separately")
+    ap.add_argument("--imgsz", type=int, help="detector input size for --weights")
     ap.add_argument("--qwen", action="store_true", help="full pipeline with Qwen verdicts (costs API calls)")
     ap.add_argument("--telegram", action="store_true", help="with --qwen: also send alerts to the linked Telegram chats")
     args = ap.parse_args()
     load_dotenv(FIRE / ".env")
 
     cfg = load_config(Path(args.config))
+    if args.weights:
+        cfg["model"]["weights"] = str(Path(args.weights).resolve().relative_to(ROOT)).replace("\\", "/")
+    if args.imgsz:
+        cfg["model"]["imgsz"] = args.imgsz
     tc = cfg["temporal"]
     window = args.window if args.window is not None else tc["window_s"]
     ratio = args.ratio if args.ratio is not None else tc["min_ratio"]

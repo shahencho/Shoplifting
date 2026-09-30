@@ -9,6 +9,9 @@ from dataclasses import dataclass
 import numpy as np
 
 
+SYNONYMS = {"flame": "fire", "flames": "fire", "fires": "fire", "smokes": "smoke"}
+
+
 @dataclass(frozen=True)
 class Box:
     cls: str                                    # "fire" or "smoke"
@@ -23,12 +26,13 @@ class FireDetector:
         self.model = YOLO(weights)
         self.imgsz = imgsz
         self.device = device
-        # {"fire": 0.35, "smoke": 0.35} for enabled classes only
-        self.conf = {c: float(d["conf"]) for c, d in detections.items() if d.get("enabled", True)}
-        names = {i: str(n).lower() for i, n in self.model.names.items()}
-        unknown = set(self.conf) - set(names.values())
-        if unknown:
-            raise ValueError(f"model {weights} has classes {sorted(names.values())}, not {sorted(unknown)}")
+        # class names differ between published models ("Fire", "flame", "Smoke"...): map them to ours
+        names = {i: SYNONYMS.get(str(n).lower(), str(n).lower()) for i, n in self.model.names.items()}
+        wanted = {c: float(d["conf"]) for c, d in detections.items() if d.get("enabled", True)}
+        self.conf = {c: v for c, v in wanted.items() if c in names.values()}
+        if not self.conf:
+            raise ValueError(f"model {weights} has classes {sorted(names.values())}, none of {sorted(wanted)}")
+        self.missing = sorted(set(wanted) - set(self.conf))       # e.g. a smoke-only model has no "fire"
         self.names = names
         self.class_ids = [i for i, n in names.items() if n in self.conf]
         self.min_conf = min(self.conf.values())
