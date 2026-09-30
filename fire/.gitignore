@@ -1,6 +1,10 @@
 # Fire module ignores (the root .gitignore is not edited, see docs/FIRE_MODULE_PLAN_3.md rule 1)
 .venv/
+__pycache__/
+*.pyc
+.pytest_cache/
 models/**/*.pt
+models/candidates/
 data/*
 !data/labels.csv
 outputs/
