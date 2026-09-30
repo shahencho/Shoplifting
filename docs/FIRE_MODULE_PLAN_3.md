@@ -82,7 +82,7 @@ Camera ──RTSP──► stream.py (latest frame + last 10 s buffer)
                      │              evidence.py freezes snapshot + clip NOW (5 s before; 3 s after collected while Qwen runs)
                      ▼
                 verify.py  5 frames + crop → Qwen: CONFIRMED / UNCERTAIN / NORMAL + reason
-                     │     (timeout 15 s or API error → treated as UNCERTAIN)
+                     │     (timeout or API error → treated as UNCERTAIN)
           ┌──────────┼─────────────────────┐
      CONFIRMED    UNCERTAIN / timeout      NORMAL
           ▼          ▼                        ▼
@@ -102,17 +102,17 @@ Camera ──RTSP──► stream.py (latest frame + last 10 s buffer)
 | Topic | Rule | Why |
 |---|---|---|
 | **Precheck message** | Off by default (`instant_precheck_message: false`). The "Checking…" state is shown on the dashboard only. | The client's phone buzzes only for real or possible fire, never for a red jacket. |
-| **Qwen timeout / error** | After `timeout_s` (15 s) or any API error → treat as **UNCERTAIN** → send "Possible fire (not verified)" | For fire, a missed alert is worse than an unverified one. |
+| **Qwen timeout / error** | After `timeout_s` or any API error → treat as **UNCERTAIN** → send "Possible fire (not verified)" | For fire, a missed alert is worse than an unverified one. For now `timeout_s` is long (180 s) because the current model is slow; it is shortened once a model is chosen (§11). |
 | **UNCERTAIN** | Alert is sent, labelled **"Possible fire"**, not "Fire confirmed" | Don't overstate what the AI said. |
 | **Cooldown after an alert** | 60 s for the **whole camera**. Two exceptions: (1) a "Possible fire" event may be **upgraded** to "Fire confirmed" during the cooldown (the detector keeps running and Qwen is asked again at most every 15 s while the fire is still there); (2) if fire is still detected after the cooldown, it goes through Qwen again and the alert is sent as **"Fire still detected"**. | One fire = one alert, not one per box, but a growing fire is never silenced and a burning one is re-announced once a minute. |
 | **Cooldown after Dismissed** | 60 s for **that area only** (IoU > 0.3 with the dismissed box) | A red jacket standing still doesn't re-trigger Qwen every few seconds, but a real fire elsewhere in the frame is still caught. **Accepted tradeoff:** a small real fire that Qwen dismisses early is silent in that area for up to 60 s, then re-checked. |
-| **Evidence clip** | Frozen **at trigger time, before Qwen is called**: the 5 s before the trigger are copied out of the 10 s ring buffer immediately, and the next 3 s are recorded while Qwen runs. Plus the trigger snapshot with boxes. Attached to the alert when the verdict arrives. | The ring buffer keeps moving during the Qwen call (up to 15 s), so frames must be copied out first or they are overwritten. 5 s + 3 s shows both the lead-up and the fire itself; Qwen takes ≥ 3 s anyway, so the alert isn't delayed. |
+| **Evidence clip** | Frozen **at trigger time, before Qwen is called**: the 5 s before the trigger are copied out of the 10 s ring buffer immediately, and the next 3 s are recorded while Qwen runs. Plus the trigger snapshot with boxes. Attached to the alert when the verdict arrives. | The ring buffer keeps moving during the Qwen call (seconds to minutes, depending on the model), so frames must be copied out first or they are overwritten. 5 s + 3 s shows both the lead-up and the fire itself; Qwen takes ≥ 3 s anyway, so the alert isn't delayed. |
 | **Live sources: bounded lag, by video time** | The reader thread reads every frame and queues every Nth one (~5 checks per second of *video*). The queue holds at most `max_lag_s` (6 s) of checks; if detection falls behind, the oldest are dropped. Timestamps are video time. | Tested 30.09 on Orbeli: YouTube/HLS delivers ~5 s of video in a ~1 s burst, then nothing for ~4 s (that's the "39 fps from a 30 fps stream"). Plain "newest frame by wall clock" checked only 1–2 s of every 5 s. With the queue: 100% of the video checked, 0 dropped. RTSP delivers steadily, so there it behaves like newest-frame. The cap keeps alerts from going stale. |
 | **YouTube / expiring URLs** | YouTube links are resolved to a direct stream URL with yt-dlp. That URL expires after a few hours, so on every reconnect the reader resolves the page link again instead of retrying the old URL. | Otherwise a long run silently dies after a few hours. |
 | **Reconnect** | On read failure: retry with backoff (1, 2, 5, 10 s, then every 10 s), show "Camera offline" on the dashboard, and send one Telegram "camera offline" notice if it lasts more than 2 min. | A silent dead camera is worse than a false alarm. |
 | **Persistence window** | Defined in **seconds** (3 s, ≥ 80% of checks), not frames. Frame skip is computed from the stream FPS so there are ~5 checks per second. | Same behaviour at 5, 15 or 25 fps. Check rate uses the stream's own reported FPS, not the read rate. |
 
-**Target time-to-alert:** ≤ 10 s from flame visible to Telegram message (≈ 3 s persistence + **≤ 5 s Qwen** + send). Timeout path: ≤ 20 s. This sets the Qwen model requirement: verdict in < 5 s (§11).
+**Target time-to-alert (later, not a step 3 requirement):** ≤ 10 s from flame visible to Telegram message (≈ 3 s persistence + ≤ 5 s Qwen + send). Step 3 first proves the chain works with the current Qwen model, however slow; model choice and latency tuning come after (§11). Until then the report measures time-to-verdict so we know where we stand.
 
 Starting parameters (tune in step 2): window 3 s, ratio 0.8, detector confidence 0.35, cooldowns 60 s.
 
@@ -222,7 +222,7 @@ detections:
 temporal: {window_s: 3, min_ratio: 0.8, iou: 0.3, checks_per_s: 5}   # frame skip derived from stream FPS
 cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15,
            after_dismissed_s: 60, dismissed_scope: area}
-verify:   {model: <fast qwen vl>, frames: 5, timeout_s: 15, on_timeout: uncertain}
+verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, on_timeout: uncertain}   # current theft model for now; tuned later
 alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false, send_uncertain: true}
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
 stream:   {prefer_substream: true}
@@ -248,7 +248,7 @@ stream:   {prefer_substream: true}
 | 0 | Branch `fire-demo`; create `fire/` skeleton (incl. `__init__.py`), `fire/.venv`, `fire/.gitignore`; move `live_cams/` content into `fire/` and delete `live_cams/` (§6); download weights | `run_live.py --source video.mp4` shows boxes; `stream_check.py` passes on Orbeli; `live_cams/` gone, root `.gitignore` unchanged |
 | 1 | Collect test videos: ~20 fire/smoke, ~20 tricky negatives (steam, red objects, sunlight, headlights), plus ~1 h of normal footage | `fire/data/` + labels CSV. **What each set measures:** fire/smoke videos → recall and time-to-alert; tricky negatives → how often each trap fools the filter / Qwen; ~1 h normal footage (+ tricky clips) → false alerts **per hour** |
 | 2 | Persistence filter + `eval_offline.py` (**filter only, no Qwen yet**) | Measured on `fire/data/`. **Pass:** filter triggers on ≥ 90% of fire/smoke videos, median time-to-trigger ≤ 4 s. Report (no pass bar yet) filter triggers per hour on normal footage and which tricky negatives pass the filter; these are what Qwen must remove in step 3. |
-| 3 | Qwen verification with a **fast** VL model (qwen3.6-plus is 40 s–3 min, too slow) + evidence freeze + cooldown/upgrade rules + Telegram bot. Re-run `eval_offline.py` with Qwen | **Pass:** ≥ 90% of fire/smoke videos alerted, median time-to-alert ≤ 10 s, Qwen median ≤ 5 s, ≤ 1 false Telegram alert per hour (normal footage + tricky clips). Alert with photo, clip, reason arrives on your phone. |
+| 3 | Qwen verification with the **current Qwen model** (`qwen/qwen3.6-plus`, as in theft) or a lighter one; **no speed target yet** + evidence freeze + cooldown/upgrade rules + Telegram bot. Re-run `eval_offline.py` with Qwen | **Pass = it works:** every alert gets a verdict + reason (or a clean timeout → Possible fire), verdicts look sensible on the test videos, the report shows verdict, reason, time-to-verdict and cost per alert, and an alert with photo, clip and reason arrives on your phone. Speed and false-alert targets are measured, not required. |
 | 4 | Stream reader: newest-frame-only, YouTube URL refresh, reconnect with backoff, camera-offline notice (§4). Reading a public stream is already proven (Orbeli, 30.09). Test on Orbeli + re-streamed fire videos | runs ≥ 3 h on Orbeli without dying (covers a YouTube URL expiry); ≤ 1 false Telegram alert per hour over ≥ 2 h including night; re-streamed fire videos detected |
 | 5 | Demo web page (§7, 4 screens), runnable on the laptop (setup A) or a server (setup B) | full demo script runs end to end |
 | 6 | Dry run + record backup video | ready for client |
@@ -275,5 +275,5 @@ stream:   {prefer_substream: true}
 
 - [ ] Which client camera(s), brand, resolution, indoor or outdoor?
 - [ ] Setup A (on site) or B (remote)? See §6
-- [ ] Which Qwen VL model is fast enough (target: verdict in **< 5 s**, see §4 time budget)?
+- [ ] **Later (after step 3 works):** which Qwen VL model to use: tune for speed (target verdict < 5 s, §4) vs accuracy vs cost, using the verdict times and costs logged in the step 3 reports. Not part of the current work.
 - [ ] Who at the client receives alerts, and in which language (Armenian / Russian)?

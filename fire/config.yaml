@@ -14,7 +14,7 @@ temporal: {window_s: 3, min_ratio: 0.8, iou: 0.3, checks_per_s: 5}   # frame ski
 cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15,
            after_dismissed_s: 60, dismissed_scope: area}
 
-verify:   {model: null, frames: 5, timeout_s: 15, on_timeout: uncertain}   # model chosen in step 3
+verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, on_timeout: uncertain}   # current theft model; speed tuned later
 
 alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false, send_uncertain: true,
            offline_notice_after_s: 120}
