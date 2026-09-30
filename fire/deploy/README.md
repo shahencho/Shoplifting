@@ -22,11 +22,11 @@ Port 8000 is used by other nginx sites, so fire uses **8010**.
 
 ## 1. One-time setup
 
-1. **DuckDNS** (free): log in at duckdns.org → add a subdomain (e.g. `firedemo`) → current ip `139.59.136.124`.
+1. **DuckDNS** (free): log in at duckdns.org → add a subdomain (ours: `alarmius`) → current ip `139.59.136.124`.
 2. **Push** `fire-demo` to GitHub (the droplet clones it from there).
 3. **Setup** (from the laptop, repo root):
    ```bash
-   ssh do-deploy "FIRE_DOMAIN=firedemo.duckdns.org bash -s" < fire/deploy/setup_droplet.sh
+   ssh do-deploy "FIRE_DOMAIN=alarmius.duckdns.org bash -s" < fire/deploy/setup_droplet.sh
    ```
 4. **Secrets** on the droplet (never in git):
    ```bash
@@ -38,7 +38,7 @@ Port 8000 is used by other nginx sites, so fire uses **8010**.
    ```bash
    ssh do-deploy "bash ~/Shoplifting/fire/deploy/deploy_to_do.sh"
    ```
-6. Open `https://firedemo.duckdns.org` → log in → setup screens: camera, detections, Telegram QR.
+6. Open `https://alarmius.duckdns.org` → log in → setup screens: camera, detections, Telegram QR.
 
 ## 2. Every deploy after that
 
