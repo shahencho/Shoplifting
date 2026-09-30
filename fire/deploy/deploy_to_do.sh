@@ -65,12 +65,13 @@ print(f"    config model: {w.relative_to(d.FIRE.parent)}")
 EOF
 
   echo "==> Clip encoder check"
-  $PY - <<'EOF'
-import os, tempfile, cv2
+  $PY - 2>/dev/null <<'EOF'
+import os, shutil, tempfile, cv2
 p = os.path.join(tempfile.mkdtemp(), "t.mp4")
 ok = cv2.VideoWriter(p, cv2.CAP_FFMPEG, cv2.VideoWriter_fourcc(*"avc1"), 10, (64, 64)).isOpened()
-print("    H.264 (avc1): OK" if ok else
-      "    WARNING: no H.264 encoder in OpenCV. Clips fall back to mp4v; Telegram / browsers may not play them inline.")
+print("    H.264 in OpenCV: OK" if ok else
+      "    OpenCV has no H.264: clips are converted with system ffmpeg" if shutil.which("ffmpeg") else
+      "    WARNING: no H.264 encoder and no ffmpeg. Clips stay mp4v; Telegram / browsers won't play them inline.")
 EOF
 
   if [ "${SKIP_TESTS:-0}" != "1" ]; then
