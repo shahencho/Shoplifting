@@ -39,7 +39,7 @@ class Perception:
         Each frame: {"idx", "t", "persons": [{"tid", "box", "kpts"}], "objects": [{"cls", "conf", "box"}]}.
         box = [x1, y1, x2, y2] in pixels; kpts = 17 x [x, y, conf].
         """
-        pose = self._YOLO(self.pose_model)  # fresh model per video = fresh tracker state
+        self.reset()
         cap = cv2.VideoCapture(str(path))
         if not cap.isOpened():
             raise IOError(f"Cannot open video: {path}")
@@ -56,15 +56,22 @@ class Perception:
                 idx += 1
                 if idx % stride:
                     continue
-                pr = pose.track(frame, persist=True, tracker=self.tracker, conf=self.conf,
-                                imgsz=self.imgsz, classes=[0], verbose=False)[0]
-                dr = self.det.predict(frame, conf=self.conf, imgsz=self.imgsz,
-                                      classes=self.object_classes, verbose=False)[0]
-                out["frames"].append({"idx": idx, "t": round(idx / fps, 3),
-                                      "persons": _persons(pr), "objects": _objects(dr)})
+                out["frames"].append(self.step(frame, idx, idx / fps))
         finally:
             cap.release()
         return out
+
+    def reset(self) -> None:
+        """Start a new video: fresh pose model = fresh tracker state."""
+        self._pose = self._YOLO(self.pose_model)
+
+    def step(self, frame, idx: int, t: float) -> dict:
+        """One frame (live use): tracked persons with keypoints + objects. Call reset() first."""
+        pr = self._pose.track(frame, persist=True, tracker=self.tracker, conf=self.conf,
+                              imgsz=self.imgsz, classes=[0], verbose=False)[0]
+        dr = self.det.predict(frame, conf=self.conf, imgsz=self.imgsz,
+                              classes=self.object_classes, verbose=False)[0]
+        return {"idx": idx, "t": round(t, 3), "persons": _persons(pr), "objects": _objects(dr)}
 
 
 def _persons(r) -> list[dict]:

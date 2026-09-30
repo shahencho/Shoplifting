@@ -4,6 +4,7 @@ from __future__ import annotations
 import base64
 import json
 import re
+import threading
 import time
 from collections import deque
 from dataclasses import dataclass
@@ -121,16 +122,18 @@ class RateLimiter:
     def __init__(self, per_min: int):
         self.per_min = per_min
         self.calls: deque[float] = deque()
+        self.lock = threading.Lock()   # shared by parallel workers (live mode)
 
     def wait(self) -> None:
         if self.per_min <= 0:
             return
-        now = time.monotonic()
-        while self.calls and now - self.calls[0] > 60:
-            self.calls.popleft()
-        if len(self.calls) >= self.per_min:
-            time.sleep(60 - (now - self.calls[0]) + 0.1)
-        self.calls.append(time.monotonic())
+        with self.lock:
+            now = time.monotonic()
+            while self.calls and now - self.calls[0] > 60:
+                self.calls.popleft()
+            if len(self.calls) >= self.per_min:
+                time.sleep(60 - (now - self.calls[0]) + 0.1)
+            self.calls.append(time.monotonic())
 
 
 class VLMClient:

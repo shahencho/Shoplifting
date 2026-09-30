@@ -34,6 +34,7 @@ def main() -> None:
     run = json.loads((run_dir / "run.json").read_text(encoding="utf-8"))
     alarm_set = set(run["store_sim"]["alarm_verdicts"])
     rows = [json.loads(line) for line in (run_dir / "events.jsonl").read_text(encoding="utf-8").splitlines() if line]
+    _add_interrupted_videos(run, rows)
 
     alarms, per_video = [], {}
     for vid, info in run["videos"].items():
@@ -98,7 +99,7 @@ def _summary(run: dict, per_video: dict) -> str:
         for k in tot:
             tot[k] += s.get(k) or 0
         d = "–" if s["delay_median_s"] is None else f"{s['delay_median_s']:.0f} s / {s['delay_max_s']:.0f} s"
-        out.append(f"| {vid} | {_mmss(s['duration_s'])} | {s['triggers']} | {s['calls']} | {s['confirmed']} | "
+        out.append(f"| {vid}{' (partial: stopped here)' if s.get('partial') else ''} | {_mmss(s['duration_s'])} | {s['triggers']} | {s['calls']} | {s['confirmed']} | "
                    f"{s['uncertain']} | {s['normal']} | {s['errors']} | ${s['cost_usd']:.3f} | "
                    f"{s['qwen_time_s'] / 60:.0f} min | {d} |")
     out.append(f"| **total** | {_mmss(tot['duration_s'])} | {tot['triggers']:.0f} | {tot['calls']:.0f} | "
@@ -187,6 +188,29 @@ document.getElementById("export").onclick = () => {{
   a.download = "alarms_reviewed.csv"; a.click();
 }};
 </script></body></html>"""
+
+
+def _add_interrupted_videos(run: dict, rows: list[dict]) -> None:
+    """A video whose run was stopped part-way is in events.jsonl but not yet in run.json.
+
+    Report it up to its last real verdict, and mark it partial (errors after that point, e.g.
+    an exhausted API key, are dropped so they don't count as Qwen failures).
+    """
+    for vid in dict.fromkeys(r["video"] for r in rows):
+        if vid in run["videos"]:
+            continue
+        evs = [r for r in rows if r["video"] == vid]
+        ok = [r for r in evs if r["verdict"] not in (None, "ERROR")]
+        cut = ok[-1]["t_start"] if ok else 0.0
+        keep = [r for r in evs if r["t_start"] <= cut]
+        for r in evs:
+            if r not in keep:
+                rows.remove(r)
+        called = [r for r in keep if r["verdict"]]
+        run["videos"][vid] = {
+            "duration_s": cut, "partial": True, "url": f"https://www.youtube.com/watch?v={vid}",
+            "triggers": len(keep), "cost_usd": sum(r["verdict_obj"]["cost_usd"] for r in called),
+        }
 
 
 def _load_reviews(path: Path) -> dict:
