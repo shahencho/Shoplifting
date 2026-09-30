@@ -218,8 +218,8 @@ The "money shot" of the demo: unmissable at the top of the live screen.
 
 - Shows the **newest event in an alert state** (confirmed / possible / unverified). Text: "🔥 FIRE CONFIRMED • Alert sent to N people • 14:32:07" (N = linked Telegram chats; "Sending alert…" until the notice is actually sent; "FIRE STILL DETECTED", "POSSIBLE FIRE" or "ALERT (NOT VERIFIED)" for the other cases). Second line: Qwen's reason.
 - Orange with a slow continuous pulse for confirmed; amber for possible / unverified.
-- **View clip** opens the 8 s evidence clip in a player (disabled until the clip is written). **Acknowledge** shows a toast and dims the banner (pulse stops).
-- **Limitation:** acknowledge is stored in the browser only (localStorage). There is no backend acknowledge yet, so it is not shared between viewers and not sent to Telegram.
+- **View clip** opens the 8 s evidence clip in a player (disabled until the clip is written). **Acknowledge** dims the banner (pulse stops) and is saved on the server (`POST /api/events/{n}/ack`, stored in the event): no more Telegram alerts or "still detected" reminders for this fire, shared by every viewer. It re-arms once the fire has been gone for 60 s, so a new fire alerts again.
+- **Limitation:** nobody is told on Telegram that the fire was acknowledged.
 
 ### Look and feel (UI v2, 2026-10-01)
 
@@ -233,7 +233,7 @@ The "money shot" of the demo: unmissable at the top of the live screen.
 ### Later (needs backend work)
 
 - **Animated boxes + confidence sparkline on the video:** today the boxes are drawn into the MJPEG frames on the server; an overlay needs box coordinates + confidence history in `/api/state`.
-- **Server-side acknowledge** (shared, logged, optionally a Telegram "acknowledged by …" message).
+- **Telegram "acknowledged by …" message** after an acknowledge (the acknowledge itself is already on the server).
 - **Demo mode in the real app** (inject a fake test event) only if dry runs show we need it. Not the same as the **demo camera** (Orbeli YouTube stream, §6), which already exists and is real footage; the plan is still a real fire video in front of the camera.
 
 ### Event states on screen 4
