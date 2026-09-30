@@ -6,6 +6,8 @@ before the trigger plus clip_after_s after it, finished once that time has passe
 """
 from __future__ import annotations
 
+import shutil
+import subprocess
 import sys
 from pathlib import Path
 
@@ -68,15 +70,37 @@ def crop(frame: np.ndarray, box: Box, pad: float = 0.5, min_side: int = 96, max_
     return jpeg(img)
 
 
-def video_writer(path: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
+def open_writer(path: Path, fps: float, size: tuple[int, int]) -> tuple[cv2.VideoWriter, str]:
     """H.264 mp4 that browsers and Telegram play. Windows: Media Foundation (OpenCV's FFmpeg build has no
-    working H.264 encoder here). Elsewhere: FFmpeg avc1, then mp4v as a last resort (plays in VLC only)."""
+    working H.264 encoder here). Elsewhere: FFmpeg avc1, then mp4v as a last resort (plays in VLC only;
+    write_clip converts it with system ffmpeg). Returns the writer and the codec it got."""
     tries = ([(cv2.CAP_MSMF, "avc1")] if sys.platform == "win32" else []) + [(cv2.CAP_FFMPEG, "avc1"), (cv2.CAP_FFMPEG, "mp4v")]
     for api, cc in tries:
         w = cv2.VideoWriter(str(path), api, cv2.VideoWriter_fourcc(*cc), fps, size)
         if w.isOpened():
-            return w
+            return w, cc
     raise IOError(f"no video encoder for {path}")
+
+
+def video_writer(path: Path, fps: float, size: tuple[int, int]) -> cv2.VideoWriter:
+    return open_writer(path, fps, size)[0]
+
+
+def to_h264(path: Path) -> bool:
+    """Re-encode an mp4v clip to H.264 in place with system ffmpeg (pip OpenCV on Linux has no H.264
+    encoder, e.g. on the droplet). False if ffmpeg is missing or fails; the mp4v file is then kept."""
+    ff = shutil.which("ffmpeg")
+    if not ff:
+        return False
+    tmp = path.with_name(path.stem + ".h264.mp4")
+    r = subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(path), "-c:v", "libx264", "-preset", "veryfast",
+                        "-pix_fmt", "yuv420p", "-movflags", "+faststart", str(tmp)], capture_output=True, text=True)
+    if r.returncode == 0 and tmp.exists() and tmp.stat().st_size > 0:
+        tmp.replace(path)
+        return True
+    tmp.unlink(missing_ok=True)
+    print(f"[evidence] ffmpeg could not convert {path.name} to H.264: {r.stderr.strip()[-200:]}", flush=True)
+    return False
 
 
 def write_clip(frames: list[tuple[float, bytes]], path: Path, fps: float, max_h: int = 720) -> bool:
@@ -87,9 +111,11 @@ def write_clip(frames: list[tuple[float, bytes]], path: Path, fps: float, max_h:
     h, w = first.shape[:2]
     s = min(1.0, max_h / h)
     size = (int(w * s) // 2 * 2, int(h * s) // 2 * 2)
-    wr = video_writer(path, fps, size)
+    wr, cc = open_writer(path, fps, size)
     for _, jpg in frames:
         img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
         wr.write(cv2.resize(img, size) if (img.shape[1], img.shape[0]) != size else img)
     wr.release()
+    if cc == "mp4v":
+        to_h264(path)
     return path.exists() and path.stat().st_size > 0
