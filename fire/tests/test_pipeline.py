@@ -65,6 +65,9 @@ def test_confirmed_alert_waits_for_clip_and_has_evidence(tmp_path):
     d = tmp_path / "out" / "events" / "E001"
     assert all((d / f).stat().st_size > 0 for f in ("snapshot.jpg", "crop.jpg", "clip.mp4", "event.json"))
     assert 7.0 <= ev.files["clip_s"] <= 8.0                         # 5 s before + 3 s after
+    cap = cv2.VideoCapture(str(d / "clip.mp4"))
+    played_s = cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
+    assert abs(played_s - ev.files["clip_s"]) < 0.5                 # plays in real time, not sped up
     assert len(pipe.events) == 1                                    # 20 s video, 60 s cooldown
 
 

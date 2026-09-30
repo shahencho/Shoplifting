@@ -68,7 +68,7 @@ def main() -> None:
 
     rt = Runtime(cfg, use_qwen=not args.no_qwen, realtime_files=not args.fast)
     rt.name_override = name
-    rt.telegram = from_env(cfg, camera=rt.camera_name)
+    rt.telegram = from_env(cfg, camera=lambda: rt.camera_name)
     if rt.telegram:
         rt.notifier = rt.telegram
         rt.telegram.start_linking()

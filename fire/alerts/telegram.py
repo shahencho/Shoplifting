@@ -59,7 +59,7 @@ def title(kind: str, ev, lang: str) -> str:
 
 
 class TelegramNotifier(Notifier):
-    def __init__(self, token: str, *, language: str = "hy", camera: str = "camera", state_path: Path = STATE,
+    def __init__(self, token: str, *, language: str = "hy", camera="camera", state_path: Path = STATE,
                  clock=None):
         self.api = f"https://api.telegram.org/bot{token}/"
         self.lang = language
@@ -125,7 +125,8 @@ class TelegramNotifier(Notifier):
         t = TEXT.get(self.lang, TEXT["en"])
         if kind in ("alert", "upgrade"):
             head = title(kind, ev, self.lang)
-            caption = f"{head}\n📷 {self.camera} · {self.clock(ev)}"
+            cam = self.camera() if callable(self.camera) else self.camera     # current name, set up after start
+            caption = f"{head}\n📷 {cam} · {self.clock(ev)}"
             if ev.reason:
                 caption += f"\n{ev.reason}"
             photo = ev.files.get("snapshot_path")
@@ -198,7 +199,8 @@ class TelegramNotifier(Notifier):
             self.state_path.write_text(json.dumps(self.state, indent=1, ensure_ascii=False), encoding="utf-8")
 
 
-def from_env(cfg: dict, camera: str = "camera", clock=None) -> TelegramNotifier | None:
+def from_env(cfg: dict, camera="camera", clock=None) -> TelegramNotifier | None:
+    """camera: a name, or a callable returning the current name."""
     token = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
     if not token:
         print("[telegram] TELEGRAM_BOT_TOKEN not set in fire/.env: alerts are only logged", flush=True)

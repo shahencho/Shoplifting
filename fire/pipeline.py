@@ -162,7 +162,9 @@ class Pipeline:
             last = before[-1][0] if before else ev.t - 1
             frames = before + [f for f in self.stream.clip(ev.t, t_end) if f[0] > last]
             path = self.out_dir / "events" / f"E{ev.n:03d}" / "clip.mp4"
-            if write_clip(frames, path, self.stream.buffer_fps):
+            span = frames[-1][0] - frames[0][0] if len(frames) > 1 else 0
+            fps = (len(frames) - 1) / span if span > 0 else self.stream.buffer_fps   # real rate -> real-time playback
+            if write_clip(frames, path, fps):
                 ev.files.update({"clip": f"events/E{ev.n:03d}/clip.mp4", "clip_path": str(path),
                                  "clip_s": round(frames[-1][0] - frames[0][0], 1)})
             self.save_event(ev)
