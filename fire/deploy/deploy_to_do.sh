@@ -48,6 +48,21 @@ main() {
 
   echo "==> Model weights"
   $PY fire/models/download.py
+  # The model in config.yaml may be one of the --candidates: fetch just that one, not all of them.
+  $PY - <<'EOF'
+import sys, yaml
+sys.path.insert(0, "fire/models")
+import download as d
+w = d.FIRE.parent / yaml.safe_load(open("fire/config.yaml", encoding="utf-8"))["model"]["weights"]
+if not w.exists():
+    if w.name not in d.CANDIDATES:
+        sys.exit(f"FATAL: {w} is missing and download.py does not know where to get it")
+    d.load_dotenv(d.FIRE / ".env")
+    d.fetch(w, d.CANDIDATES[w.name][0])
+if not w.exists():
+    sys.exit(f"FATAL: could not download {w}")
+print(f"    config model: {w.relative_to(d.FIRE.parent)}")
+EOF
 
   echo "==> Clip encoder check"
   $PY - <<'EOF'
