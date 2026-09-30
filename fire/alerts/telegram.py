@@ -58,6 +58,21 @@ def title(kind: str, ev, lang: str) -> str:
     return t["possible_unverified"]
 
 
+def mmss(s: float) -> str:
+    return f"{int(s // 60)}:{s % 60:04.1f}"
+
+
+def timing(ev, now: float | None = None) -> str:
+    """YOLO first saw it -> alert triggered (persistence filter) -> sent (clip + processing). Video time for
+    files, seconds since the stream started for cameras."""
+    if getattr(ev, "first_seen_t", None) is None:
+        return ""
+    line = f"⏱ YOLO {mmss(ev.first_seen_t)} → alert {mmss(ev.t)} (+{ev.t - ev.first_seen_t:.1f} s)"
+    if ev.trigger_time:
+        line += f" · sent +{(now or time.time()) - ev.trigger_time:.1f} s"
+    return line
+
+
 class TelegramNotifier(Notifier):
     def __init__(self, token: str, *, language: str = "hy", camera="camera", state_path: Path = STATE,
                  clock=None):
@@ -127,6 +142,8 @@ class TelegramNotifier(Notifier):
             head = title(kind, ev, self.lang)
             cam = self.camera() if callable(self.camera) else self.camera     # current name, set up after start
             caption = f"{head}\n📷 {cam} · {self.clock(ev)}"
+            if timing(ev):
+                caption += f"\n{timing(ev)}"
             if ev.reason:
                 caption += f"\n{ev.reason}"
             photo = ev.files.get("snapshot_path")

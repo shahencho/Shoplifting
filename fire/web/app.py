@@ -16,6 +16,7 @@ from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 
 from fire.runtime import Runtime, camera_url, test_camera
+from fire.stream import is_file
 
 WEB = Path(__file__).resolve().parent
 COOKIE = "fire_session"
@@ -103,7 +104,18 @@ def create_app(rt: Runtime) -> FastAPI:
             raise HTTPException(400, str(e))
         rt.settings["camera"] = cam
         rt.save()
-        rt.start()
+        rt.start()                        # a camera starts; a video file waits for Play
+        return {"ok": True}
+
+    @app.post("/api/play", dependencies=[Depends(auth)])
+    def play():
+        """Play (or replay from the start) the saved video file. Only ever on this button."""
+        if not rt.source or not is_file(rt.source):
+            raise HTTPException(400, "only a video file can be played")
+        if rt.name_override is None:
+            rt.start(play=True)           # the saved camera
+        else:
+            rt.start(rt.source)           # a --source file from the command line
         return {"ok": True}
 
     # --- 2. detections ---

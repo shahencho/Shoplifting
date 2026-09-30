@@ -346,7 +346,8 @@ const isAcked = e => !!(e && e.acked);
 const STATE = {checking:["Checking…","AI is looking at it"], confirmed:["Fire confirmed",""], possible:["Possible fire",""],
                dismissed:["Dismissed","false alarm, no alert sent"], unverified:["Alert (not verified)",""]};
 const CAMSTATE = {ok:["ok","Monitoring"], connecting:["wait","Connecting…"], offline:["bad","Camera offline"],
-                  not_configured:["", "No camera"], ended:["", "Video ended"], stopped:["", "Stopped"]};
+                  not_configured:["", "No camera"], ended:["", "Video ended"], stopped:["", "Stopped"],
+                  ready:["", "Video ready"]};
 const ALERTS = new Set(["confirmed","possible","unverified"]);
 const evTime = e => (e.wall_time || "").slice(11) || `t=${e.t.toFixed(0)}s`;
 
@@ -457,8 +458,13 @@ function drawVideoState(){
   } else if (st.state === "not_configured"){
     $("#l-phic").innerHTML = icon("cam"); $("#l-phbig").textContent = "No camera yet";
     $("#l-phsmall").innerHTML = `<a href="#camera" style="color:var(--accent-ink)">Open Settings to connect one</a>`;
-  } else if (st.state === "ended" || st.state === "stopped"){
-    $("#l-phic").innerHTML = icon("cam"); $("#l-phbig").textContent = CAMSTATE[st.state][1]; $("#l-phsmall").textContent = "";
+  } else if (st.state === "ended" || st.state === "stopped" || st.state === "ready"){
+    // a video file plays only on this button (never by itself after a restart or deploy)
+    $("#l-phic").innerHTML = icon("cam"); $("#l-phbig").textContent = CAMSTATE[st.state][1];
+    const label = st.state === "ready" ? "Play video" : "Replay from the start";
+    if (!st.file) $("#l-phsmall").textContent = "";
+    else if (!$("#playbtn") || $("#playbtn").dataset.label !== label)
+      $("#l-phsmall").innerHTML = `<button class="b primary" id=playbtn data-label="${label}">${icon("play")}${label}</button>`;
   } else {
     $("#l-phic").innerHTML = `<span class=spin></span>`; $("#l-phbig").textContent = "Connecting…"; $("#l-phsmall").textContent = "";
   }
@@ -559,6 +565,11 @@ function tick(){
 
 document.addEventListener("click", async ev => {
   const t = ev.target.closest("button, img[data-zoom], dialog") || ev.target;
+  if (t.id === "playbtn"){
+    t.disabled = true;
+    try { await api("/api/play", {}); await refresh(); toast("Playing the video from the start"); }
+    catch(err){ t.disabled = false; toast("Could not play: " + err.message); }
+  }
   if (t.dataset.clip){ const n = +t.dataset.clip; openEv.has(n) ? openEv.delete(n) : openEv.add(n); drawLive(); }
   if (t.dataset.fb){ const e = S.events.find(x => x.n === +t.dataset.n), v = e.feedback === t.dataset.fb ? "" : t.dataset.fb;
     await api(`/api/events/${t.dataset.n}/feedback`, {value: v}); await refresh();

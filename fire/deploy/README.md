@@ -61,6 +61,16 @@ Not touched by deploys: `fire/.env`, `fire/state/` (saved camera, linked Telegra
 
 Event folders older than 14 days are deleted daily (`/etc/cron.daily/fire-demo-cleanup`).
 
+## Current test mode
+
+- **Qwen is off** (`--no-qwen` in `ecosystem.config.js`): YOLO + the 3 s filter alone decide. Every event goes to
+  Telegram as "Possible fire (not verified)" with photo, clip and a timing line
+  (`⏱ YOLO <first seen> → alert <trigger> (+s) · sent +s`). Remove `--no-qwen` and deploy to turn Qwen back on.
+- **Video files never play by themselves.** After a start, deploy or camera save the dashboard shows "Video ready";
+  it plays only on **Play / Replay from the start**. Live cameras start at once.
+- **AV1 videos** (most YouTube downloads) don't decode here: convert them first:
+  `ffmpeg -i in.mp4 -c:v libx264 -pix_fmt yuv420p -an out.mp4`.
+
 ## Watch out
 
 - **Shared box.** Other apps run here. fire is capped at 1.5 GB by pm2; check `pm2 ls` after the first deploy.

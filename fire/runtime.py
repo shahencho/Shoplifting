@@ -20,7 +20,7 @@ from fire.detector import FireDetector
 from fire.events import ALERT_STATES
 from fire.evidence import draw_boxes, jpeg
 from fire.pipeline import Pipeline
-from fire.stream import Stream, open_capture
+from fire.stream import Stream, is_file, open_capture
 from fire.verify import AsyncVerifier, NoVerifier, Verifier
 
 FIRE = Path(__file__).resolve().parent
@@ -95,6 +95,7 @@ class Runtime:
         self.stream: Stream | None = None
         self.out_dir: Path | None = None
         self.source = ""
+        self.ready = False                          # a saved video file waiting for Play
         self.name_override: str | None = None       # --name / --source from the command line
         self.closing = False                        # set on shutdown: ends live-view streams
         self.latest_jpeg: bytes | None = None
@@ -124,9 +125,12 @@ class Runtime:
 
     # --- run ---
 
-    def start(self, source: str | None = None) -> None:
-        """Start (or restart) monitoring. source defaults to the camera saved in the settings."""
+    def start(self, source: str | None = None, *, play: bool = False) -> None:
+        """Start (or restart) monitoring. source defaults to the camera saved in the settings.
+        A saved video file never plays by itself (app start, deploy, camera save): it waits for Play in the
+        dashboard (play=True), so a restart can't replay an old fire into Telegram. Cameras start at once."""
         self.stop()
+        self.ready = False
         if source is None:
             cam = self.settings.get("camera")
             self.name_override = None
@@ -134,6 +138,10 @@ class Runtime:
                 self.log("[runtime] no camera configured yet: open the dashboard and do the setup")
                 return
             source = camera_url(cam)
+            if is_file(source) and not play:
+                self.source, self.stream, self.pipeline, self.ready = source, None, None, True
+                self.log(f"[runtime] video {redact(source)} ready: press Play in the dashboard")
+                return
         self.source = source
         sc, vc = self.cfg["stream"], self.cfg["verify"]
         self.stream = Stream(source, max_height=sc["max_height"], buffer_s=sc["buffer_s"], buffer_fps=sc["buffer_fps"],
@@ -195,7 +203,7 @@ class Runtime:
 
     def status(self) -> dict:
         s, p = self.stream, self.pipeline
-        state = "not_configured" if not self.source else (s.status if s else "stopped")
+        state = "not_configured" if not self.source else "ready" if self.ready else (s.status if s else "stopped")
         if s is not None and not s.live and s.status == "ended":
             state = "ended"
         evs = p.events if p else []
@@ -211,6 +219,7 @@ class Runtime:
                          "dismissed": sum(e.state == "dismissed" for e in evs)},
             "detections": self.enabled, "setup_done": bool(self.settings.get("setup_done")),
             "demo": bool(self.demo_url) and self.source == self.demo_url,
+            "file": bool(self.source) and is_file(self.source),
         }
 
     def events(self) -> list[dict]:

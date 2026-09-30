@@ -51,6 +51,8 @@ class Event:
     feedback: str | None = None                         # dashboard: real / false
     acked: bool = False                                 # dashboard: acknowledged, reminders stop
     wall_time: str = ""                                 # live: clock time of the trigger
+    first_seen_t: float | None = None                   # video seconds: YOLO first saw fire/smoke (this streak)
+    trigger_time: float = 0.0                           # epoch seconds at the trigger: "sent +N s" in Telegram
 
     def to_dict(self) -> dict:
         d = asdict(self)

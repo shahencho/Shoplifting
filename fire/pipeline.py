@@ -57,6 +57,9 @@ class Pipeline:
         self._verdicts: list[tuple[Action, object, float]] = []     # (action, future, t_asked)
         self._clips: list[tuple[Event, list, float]] = []           # (event, frames before, t_end)
         self._waiting: list[Notice] = []                            # alerts waiting for their clip
+        # start of the current detection streak (a gap longer than window_s ends it): "YOLO first saw it"
+        self._seen_since: float | None = None
+        self._last_seen = float("-inf")
         self.lock = threading.Lock()
         self.stats = {"checks": 0, "t": 0.0, "detector_ms": 0.0, "qwen_calls": 0, "qwen_cost_usd": 0.0}
         (out_dir / "events").mkdir(parents=True, exist_ok=True)
@@ -83,6 +86,10 @@ class Pipeline:
             boxes = self.detector.detect_fire(frame)
             self.stats["detector_ms"] = round((time.perf_counter() - t0) * 1000, 1)
         boxes = [b for b in boxes if self.enabled.get(b.cls, False) and b.conf >= self.conf.get(b.cls, 1)]
+        if boxes:
+            if self._seen_since is None or t - self._last_seen > self.window_s:
+                self._seen_since = t
+            self._last_seen = t
         p = self.filter.update(t, boxes)
         with self.lock:
             self._collect_verdicts(t)
@@ -114,6 +121,8 @@ class Pipeline:
         crop_jpg = crop(frame, box)
         if act.purpose == "initial":
             ev.wall_time = self.clock() if self.clock else ""
+            ev.trigger_time = time.time()
+            ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
             d = self.out_dir / "events" / f"E{ev.n:03d}"
             d.mkdir(parents=True, exist_ok=True)
             (d / "snapshot.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))

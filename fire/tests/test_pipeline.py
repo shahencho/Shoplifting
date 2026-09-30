@@ -83,3 +83,10 @@ def test_switched_off_class_is_ignored(tmp_path):
                     enabled={"fire": False, "smoke": True}, log=lambda m: None)
     pipe.run(boxes_for=lambda idx: [BOX])
     assert pipe.events == []
+
+
+def test_event_records_when_yolo_first_saw_it(tmp_path):
+    pipe, _, _ = _run(tmp_path, ["CONFIRMED"])
+    ev = pipe.events[0]
+    assert abs(ev.first_seen_t - 2.0) < 0.25                        # first box at 2 s
+    assert ev.t - ev.first_seen_t >= 2.0 and ev.trigger_time > 0     # >= 80% of the 3 s window
