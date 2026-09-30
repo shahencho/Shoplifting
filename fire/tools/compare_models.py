@@ -43,7 +43,7 @@ def clips_from_labels() -> list[dict]:
         smoke = float(r["smoke_visible_s"]) if r.get("smoke_visible_s") else None
         flame = float(r["flame_visible_s"]) if r.get("flame_visible_s") else None
         if r["label"] == "normal":
-            out.append({"video": v, "start": 0.0, "end": 60.0, "smoke": None, "flame": None, "normal": True})
+            out.append({"video": v, "start": 0.0, "end": 1e9, "smoke": None, "flame": None, "normal": True})  # whole clip
         elif smoke is not None:
             end = (flame or smoke) + 16
             out.append({"video": v, "start": 0.0, "end": end, "smoke": smoke, "flame": flame, "normal": False})
@@ -90,57 +90,73 @@ def main() -> None:
     print("Clips: " + ", ".join(f"{c['video'].name} {c['start']:.0f}-{c['end']:.0f}s"
                                 + (" (normal)" if c["normal"] else f" (smoke {c['smoke']}s, flame {c['flame']}s)")
                                 for c in clips))
-    frames = {i: sample(c["video"], c["start"], c["end"], args.step) for i, c in enumerate(clips)}
-
     out_dir = FIRE / "outputs" / "compare" / f"{datetime.now():%Y%m%d_%H%M%S}"
     out_dir.mkdir(parents=True)
     det_cfg = {"fire": {"enabled": True, "conf": LOW}, "smoke": {"enabled": True, "conf": LOW}}
-    rows, tiles = [], []
+    dets, st = {}, {}
     for m in models:
         try:
-            det = FireDetector(str(m), det_cfg, imgsz=args.imgsz)
+            dets[m] = FireDetector(str(m), det_cfg, imgsz=args.imgsz)
         except Exception as e:
             print(f"{m.name}: cannot load ({type(e).__name__}: {e})")
             continue
-        ms, row = [], {"model": m.name, "classes": "/".join(sorted(set(det.names.values()))),
-                       "size_mb": round(m.stat().st_size / 1e6, 1)}
-        smoke_only_max, neg_hits, tile = 0.0, 0, None
-        firsts = {}
-        for i, c in enumerate(clips):
-            for t, f in frames[i]:
+        st[m] = {"ms": [], "firsts": {}, "smoke_only_max": 0.0, "neg": {}, "tile": None}
+
+    # one clip at a time (all models on it), so long normal footage never sits in memory at once
+    for c in clips:
+        frames = sample(c["video"], c["start"], c["end"], args.step)
+        for m, det in dets.items():
+            s_ = st[m]
+            for t, f in frames:
                 t0 = time.perf_counter()
                 boxes = det.detect_fire(f)
-                ms.append((time.perf_counter() - t0) * 1000)
+                s_["ms"].append((time.perf_counter() - t0) * 1000)
                 best = {k: max((b.conf for b in boxes if b.cls == k), default=0.0) for k in ("fire", "smoke")}
                 if c["normal"]:
-                    neg_hits += sum(1 for b in boxes if b.conf >= 0.25)
+                    hits = [b for b in boxes if b.conf >= 0.25]
+                    if hits:
+                        name = c["video"].stem
+                        if name not in s_["neg"]:       # save the first false detection per clip to look at
+                            cv2.imwrite(str(out_dir / f"fp_{m.stem}_{name}_{t:.0f}s.jpg"), draw_boxes(f, hits))
+                        s_["neg"][name] = s_["neg"].get(name, 0) + 1
                     continue
                 for k in ("fire", "smoke"):
                     for thr in (0.25, 0.10):
                         if best[k] >= thr:
-                            firsts.setdefault((c["video"].name, k, thr), t)
+                            s_["firsts"].setdefault((c["video"].name, k, thr), t)
                 if c["smoke"] is not None and c["smoke"] <= t < (c["flame"] or c["end"]):
-                    smoke_only_max = max(smoke_only_max, best["smoke"])
-                if tile is None and t >= args.show_t:
+                    s_["smoke_only_max"] = max(s_["smoke_only_max"], best["smoke"])
+                if s_["tile"] is None and t >= args.show_t:
                     img = draw_boxes(f, [b for b in boxes if b.conf >= 0.10])
                     img = cv2.resize(img, (480, int(480 * img.shape[0] / img.shape[1])))
                     cv2.putText(img, f"{m.stem[:28]} t={t:.0f}s", (6, 22), 0, 0.6, (0, 255, 255), 2)
-                    tile = img
-        fire_clip = next((c for c in clips if not c["normal"]), None)
-        name = fire_clip["video"].name if fire_clip else ""
-        row.update({
-            "smoke_first_0.25": firsts.get((name, "smoke", 0.25)), "smoke_first_0.10": firsts.get((name, "smoke", 0.10)),
-            "smoke_max_before_flame": round(smoke_only_max, 2),
-            "fire_first_0.25": firsts.get((name, "fire", 0.25)),
-            "normal_hits_0.25": neg_hits if any(c["normal"] for c in clips) else "",
-            "ms_per_frame": round(statistics.median(ms)) if ms else None,
-        })
+                    s_["tile"] = img
+        print(f"  done {c['video'].name} ({len(frames)} frames)", flush=True)
+        del frames
+
+    rows, tiles = [], []
+    fire_clip = next((c for c in clips if not c["normal"]), None)
+    name = fire_clip["video"].name if fire_clip else ""
+    n_normal = sum(1 for c in clips if c["normal"])
+    for m, det in dets.items():
+        s_ = st[m]
+        row = {"model": m.name, "classes": "/".join(sorted(set(det.names.values()))),
+               "size_mb": round(m.stat().st_size / 1e6, 1),
+               "smoke_first_0.25": s_["firsts"].get((name, "smoke", 0.25)),
+               "smoke_first_0.10": s_["firsts"].get((name, "smoke", 0.10)),
+               "smoke_max_before_flame": round(s_["smoke_only_max"], 2),
+               "fire_first_0.25": s_["firsts"].get((name, "fire", 0.25)),
+               "normal_frames_with_hits": sum(s_["neg"].values()) if n_normal else "",
+               "normal_clips_with_hits": f"{len(s_['neg'])}/{n_normal}" if n_normal else "",
+               "ms_per_frame": round(statistics.median(s_["ms"])) if s_["ms"] else None}
         rows.append(row)
-        if tile is not None:
-            tiles.append(tile)
+        if s_["tile"] is not None:
+            tiles.append(s_["tile"])
         print(f"  {m.name:32s} smoke first {row['smoke_first_0.25']}s (0.10: {row['smoke_first_0.10']}s), "
               f"max before flame {row['smoke_max_before_flame']}, fire first {row['fire_first_0.25']}s, "
-              f"{row['ms_per_frame']} ms" + (f", normal-clip hits {neg_hits}" if row["normal_hits_0.25"] != "" else ""))
+              f"{row['ms_per_frame']} ms"
+              + (f", normal: {row['normal_frames_with_hits']} frames with a box >= 0.25 in "
+                 f"{row['normal_clips_with_hits']} clips {s_['neg'] or ''}" if n_normal else ""))
 
     with (out_dir / "results.csv").open("w", newline="", encoding="utf-8") as f:
         w = csv.DictWriter(f, fieldnames=list(rows[0]))

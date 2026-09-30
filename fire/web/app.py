@@ -68,6 +68,7 @@ def create_app(rt: Runtime) -> FastAPI:
         if cam.get("password"):
             cam["password"] = ""            # never sent back to the browser
             cam["has_password"] = True
+        cam["demo"] = bool(rt.demo_url) and cam.get("url") == rt.demo_url
         tg = rt.telegram
         return {"status": rt.status(), "camera": cam, "events": rt.events(),
                 "telegram": {"enabled": tg is not None, "link": tg.link if tg else "",
@@ -148,7 +149,7 @@ def create_app(rt: Runtime) -> FastAPI:
     def live():
         def frames():
             last = None
-            while True:
+            while not rt.closing:               # ends on shutdown, so Ctrl+C isn't held by open viewers
                 jpg = rt.latest_jpeg
                 if jpg is not None and jpg is not last:
                     last = jpg
@@ -164,6 +165,12 @@ def create_app(rt: Runtime) -> FastAPI:
         if rt.out_dir.resolve() not in f.parents or not f.is_file():
             raise HTTPException(404)
         return FileResponse(f)
+
+    @app.post("/api/events/{n}/ack", dependencies=[Depends(auth)])
+    def acknowledge(n: int):
+        if not rt.acknowledge(n):
+            raise HTTPException(404)
+        return {"ok": True}
 
     @app.post("/api/events/{n}/feedback", dependencies=[Depends(auth)])
     def feedback(n: int, body: dict = Body(...)):

@@ -15,6 +15,8 @@ Rules:
   * After the cooldown, if the filter kept passing, the next event is kind "still" (Fire still detected).
 - After a dismissal: that area (IoU > iou with the dismissed box) is ignored for after_dismissed_s;
   fire elsewhere in the frame is still caught.
+- Acknowledge (dashboard): no more alerts, reminders or upgrades while this fire goes on. Alerting re-arms
+  once the filter has not passed for rearm_after_s (the fire is gone); a fire after that alerts again.
 """
 from __future__ import annotations
 
@@ -47,6 +49,7 @@ class Event:
     files: dict = field(default_factory=dict)           # snapshot / crop / clip paths
     sent: list[str] = field(default_factory=list)       # notices sent: alert / upgrade
     feedback: str | None = None                         # dashboard: real / false
+    acked: bool = False                                 # dashboard: acknowledged, reminders stop
     wall_time: str = ""                                 # live: clock time of the trigger
 
     def to_dict(self) -> dict:
@@ -84,6 +87,12 @@ class EventManager:
         self.last_alert: Event | None = None
         self._last_pass: float | None = None
         self._last_upgrade_try = float("-inf")
+        self.muted = False                  # acknowledged: silent until the fire is gone for rearm_after_s
+        self.rearm_after_s = 60.0
+
+    def acknowledge(self, ev: Event) -> None:
+        ev.acked = True
+        self.muted = True
 
     @classmethod
     def from_config(cls, cfg: dict) -> "EventManager":
@@ -93,8 +102,12 @@ class EventManager:
 
     def on_check(self, t: float, idx: int, p: Persist, boxes: list[Box]) -> Action | None:
         if not p.passed:
+            if self.muted and (self._last_pass is None or t - self._last_pass >= self.rearm_after_s):
+                self.muted = False              # the acknowledged fire is gone: alert on the next one
             return None
         prev_pass, self._last_pass = self._last_pass, t
+        if self.muted:
+            return None
         if self.in_flight:
             return None
         if t < self.cooldown_until:
@@ -132,6 +145,11 @@ class EventManager:
                 return Notice("upgrade", ev)
             return None
         ev.state, ev.verdict, ev.confidence, ev.reason, ev.verdict_t = state, v.verdict, v.confidence, v.reason, t
+        if self.muted and state != "dismissed":
+            ev.acked = True                     # asked before the acknowledge: record it, don't notify
+            self.cooldown_until = t + self.after_alert_s
+            self.last_alert = ev
+            return None
         if state == "dismissed":
             self.dismissed.append((t + self.after_dismissed_s, ev.box))
             return None

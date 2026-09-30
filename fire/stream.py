@@ -11,10 +11,13 @@ The reader also keeps a short JPEG ring buffer for evidence clips. On read failu
 backoff and resolves YouTube page links again, because their direct stream URLs expire after a few hours.
 
 Files: read in order and every Nth frame is yielded, N set so there are ~checks_per_s checks per second
-of video. By default as fast as detection allows; realtime=True paces it like a camera.
+of video. By default as fast as detection allows; realtime=True paces it like a camera and skips checks
+when detection falls behind (like a live camera would). A start time can follow the path:
+"fire/data/x.mp4#t=13:00" or "#t=780"; timestamps stay in video time.
 """
 from __future__ import annotations
 
+import os
 import shutil
 import subprocess
 import sys
@@ -24,14 +27,30 @@ from collections import deque
 from pathlib import Path
 from typing import Iterator
 
+# RTSP over TCP: FFmpeg's default UDP often fails or gives smeared frames over VPN/NAT.
+# Must be set before OpenCV opens a stream; other source types ignore it.
+os.environ.setdefault("OPENCV_FFMPEG_CAPTURE_OPTIONS", "rtsp_transport;tcp")
+
 import cv2
 import numpy as np
 
 DEFAULT_FPS = 25.0
 
 
+def split_start(source: str) -> tuple[str, float]:
+    """'x.mp4#t=13:00' -> ('x.mp4', 780.0). Only for local files; URLs pass through unchanged."""
+    if "#t=" in source:
+        path, frag = source.rsplit("#t=", 1)
+        if Path(path).is_file():
+            secs = 0.0
+            for part in frag.strip().split(":"):
+                secs = secs * 60 + float(part)
+            return path, secs
+    return source, 0.0
+
+
 def is_file(source: str) -> bool:
-    return Path(source).is_file()
+    return Path(split_start(source)[0]).is_file()
 
 
 def resolve(url: str, max_height: int = 720) -> str:
@@ -51,12 +70,16 @@ def resolve(url: str, max_height: int = 720) -> str:
 
 def open_capture(source: str, max_height: int = 720) -> tuple[cv2.VideoCapture, float]:
     """Open a source; returns the capture and the stream's own declared FPS (not the read rate)."""
-    src = source if is_file(source) else resolve(source, max_height)
+    path, start = split_start(source)
+    src = path if is_file(source) else resolve(source, max_height)
     cap = cv2.VideoCapture(src, cv2.CAP_FFMPEG)
     if not cap.isOpened():
         raise IOError(f"could not open {source}")
     fps = cap.get(cv2.CAP_PROP_FPS)
-    return cap, fps if 1 <= fps <= 120 else DEFAULT_FPS
+    fps = fps if 1 <= fps <= 120 else DEFAULT_FPS
+    if start:
+        cap.set(cv2.CAP_PROP_POS_FRAMES, int(start * fps))
+    return cap, fps
 
 
 class Stream:
@@ -109,7 +132,8 @@ class Stream:
         cap, self.fps = open_capture(self.source)
         self.status = "ok"
         step = max(1, round(self.fps / checks_per_s))
-        t0, idx = time.monotonic(), -1
+        start = int(split_start(self.source)[1] * self.fps)
+        t0, idx, t_start = time.monotonic(), start - 1, start / self.fps
         try:
             while not self._stop.is_set():
                 ok, frame = cap.read()
@@ -120,8 +144,13 @@ class Stream:
                 self._buffer_push(t, frame)
                 if idx % step:
                     continue
-                if self.realtime and (wait := t0 + t - time.monotonic()) > 0:
-                    time.sleep(wait)
+                if self.realtime:
+                    wait = t0 + (t - t_start) - time.monotonic()
+                    if wait > 0:
+                        time.sleep(wait)
+                    elif -wait > step / self.fps:      # detection is behind the camera: skip, like live
+                        self.dropped += 1
+                        continue
                 yield idx, t, frame
         finally:
             cap.release()

@@ -99,3 +99,28 @@ def test_timeout_counts_as_possible_fire():
 def test_one_qwen_call_at_a_time():
     em, _ = drive([[A]] * 60, lambda a: "NORMAL", latency=30)   # slow Qwen, triggers keep coming
     assert len(em.events) == 1
+
+
+def test_acknowledge_stops_reminders_until_fire_is_gone():
+    em_holder = {}
+
+    def answer(act):
+        if act.event.n == 1:
+            em_holder["ev"] = act.event
+        return "CONFIRMED"
+
+    f, em = PersistenceFilter(3, 0.8), EventManager()
+    seq = [[A]] * (5 * 200) + [[]] * (5 * 70) + [[A]] * (5 * 10)   # 200 s fire, 70 s nothing, fire again
+    pending, notices = [], []
+    for i, boxes in enumerate(seq):
+        t = i / CPS
+        for due, act, v in [x for x in pending if x[0] <= t]:
+            pending.remove((due, act, v))
+            if n := em.on_verdict(act, Verdict(v, 80, "", "", 2.0), t):
+                notices.append((round(t, 1), n.kind, n.event.n))
+                if n.event.n == 1:
+                    em.acknowledge(n.event)             # user presses Acknowledge on the first alert
+        if act := em.on_check(t, i, f.update(t, boxes), boxes):
+            pending.append((t + 2.0, act, answer(act)))
+    assert [n for _, _, n in notices] == [1, 2]          # no "still detected" for 200 s, then the new fire
+    assert notices[1][0] > 270 and em.events[1].kind == "new"

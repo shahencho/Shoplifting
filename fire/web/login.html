@@ -1,22 +1,52 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Fire Watch login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
 <style>
-:root{color-scheme:light;--bg:#f9f9f7;--card:#fcfcfb;--ink:#0b0b0b;--ink2:#52514e;--line:rgba(11,11,11,.12);--accent:#d03b3b}
-@media (prefers-color-scheme:dark){:root{color-scheme:dark;--bg:#0d0d0d;--card:#1a1a19;--ink:#fff;--ink2:#c3c2b7;--line:rgba(255,255,255,.12)}}
-*{box-sizing:border-box}body{margin:0;min-height:100vh;display:grid;place-items:center;background:var(--bg);color:var(--ink);
-  font:16px/1.4 system-ui,-apple-system,"Segoe UI",sans-serif;padding:16px}
-form{width:100%;max-width:340px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:24px}
-h1{font-size:20px;margin:0 0 4px}p{margin:0 0 18px;color:var(--ink2);font-size:14px}
-label{display:block;font-size:13px;color:var(--ink2);margin:12px 0 4px}
-input{width:100%;font:inherit;padding:10px 12px;border:1px solid var(--line);border-radius:8px;background:var(--bg);color:var(--ink)}
-button{width:100%;margin-top:18px;font:inherit;font-weight:600;padding:11px;border:0;border-radius:8px;background:var(--accent);color:#fff}
-#err{color:var(--accent);font-size:14px;min-height:20px;margin-top:10px}
+:root{color-scheme:dark;--bg:#0B0D10;--card:#13161B;--ink:#ECEEF1;--ink2:#A3A9B3;--line:rgba(255,255,255,.12);--accent:#FF6B2C;--bad:#F26B6B}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);background:var(--bg);color:var(--ink);
+  font:16px/1.45 "Geist",system-ui,-apple-system,"Segoe UI",sans-serif}
+.side{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:48px 56px;border-right:1px solid rgba(255,255,255,.06);
+  background-color:#07080A;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:56px 56px}
+.side::after{content:"";position:absolute;right:-160px;bottom:-160px;width:480px;height:480px;border-radius:50%;background:rgba(255,107,44,.18);filter:blur(110px);pointer-events:none}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
+.logo{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--accent);color:#0B0D10}
+svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.kick{font:500 12px "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;color:var(--accent);margin:0 0 18px}
+h1{font-size:52px;line-height:1.05;letter-spacing:-.03em;margin:0;max-width:560px}
+.lead{font-size:18px;color:var(--ink2);margin:20px 0 0;max-width:460px}
+.feats{display:flex;gap:26px;font-size:14px;color:var(--ink2);position:relative;z-index:1}
+.feats span{display:flex;align-items:center;gap:8px}.feats i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.formside{display:grid;place-items:center;padding:24px}
+form{width:100%;max-width:360px}
+form .brand{display:none;margin-bottom:32px}
+h2{font-size:26px;letter-spacing:-.01em;margin:0 0 4px}.sub{margin:0 0 8px;color:var(--ink2);font-size:15px}
+label{display:block;font-size:13px;color:var(--ink2);margin:16px 0 6px}
+input{width:100%;font:inherit;height:48px;padding:0 14px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink)}
+input:focus{outline:2px solid rgba(255,107,44,.6);border-color:transparent}
+button{width:100%;margin-top:22px;height:52px;font:inherit;font-weight:700;border:0;border-radius:11px;background:var(--accent);color:#0B0D10;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+#err{color:var(--bad);font-size:14px;min-height:20px;margin-top:12px}
+@media (max-width:900px){body{grid-template-columns:1fr}.side{display:none}form .brand{display:flex}button{height:56px}}
 </style></head><body>
-<form id=f><h1>🔥 Fire Watch</h1><p>Visual fire &amp; smoke warning</p>
-<label for=u>User</label><input id=u autocomplete=username required>
-<label for=p>Password</label><input id=p type=password autocomplete=current-password required>
-<button>Log in</button><div id=err></div></form>
+<section class=side>
+  <div class=brand><span class=logo><svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>Fire Watch</div>
+  <div><p class=kick>VISUAL EARLY WARNING</p><h1>See fire and smoke on the cameras you already have.</h1>
+    <p class=lead>Every detection is double-checked by AI before anyone's phone buzzes.</p></div>
+  <div class=feats><span><i></i>Hikvision · Dahua · RTSP</span><span><i></i>AI verification</span><span><i></i>Telegram alerts</span></div>
+</section>
+<div class=formside>
+<form id=f>
+  <div class=brand><span class=logo><svg viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></svg></span>Fire Watch</div>
+  <h2>Log in</h2><p class=sub>Visual fire &amp; smoke warning</p>
+  <label for=u>User</label><input id=u autocomplete=username required>
+  <label for=p>Password</label><input id=p type=password autocomplete=current-password required>
+  <button>Log in</button><div id=err></div>
+</form>
+</div>
 <script>
 document.getElementById("f").onsubmit = async ev => {
   ev.preventDefault();

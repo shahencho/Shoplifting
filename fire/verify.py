@@ -12,7 +12,8 @@ import base64
 import os
 import re
 import time
-from concurrent.futures import Future, ThreadPoolExecutor
+import threading
+from concurrent.futures import Future
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -108,17 +109,25 @@ def _image(jpg: bytes) -> dict:
 
 
 class AsyncVerifier:
-    """Live: calls run in worker threads so detection never waits for Qwen."""
+    """Live: each call runs in its own daemon thread so detection never waits for Qwen, and Ctrl+C
+    never waits for a call still in progress (a ThreadPoolExecutor is joined at exit: up to timeout_s)."""
 
-    def __init__(self, verifier: Verifier, workers: int = 2):
+    def __init__(self, verifier: Verifier):
         self.verifier = verifier
-        self.pool = ThreadPoolExecutor(workers, thread_name_prefix="qwen")
 
     def submit(self, frames, crop, cls) -> Future:
-        return self.pool.submit(self.verifier.classify, frames, crop, cls)
+        f: Future = Future()
+
+        def work():
+            try:
+                f.set_result(self.verifier.classify(frames, crop, cls))
+            except BaseException as e:           # classify never raises; belt and braces
+                f.set_exception(e)
+        threading.Thread(target=work, daemon=True, name="qwen").start()
+        return f
 
     def close(self) -> None:
-        self.pool.shutdown(wait=False, cancel_futures=True)
+        pass
 
 
 class SyncVerifier:

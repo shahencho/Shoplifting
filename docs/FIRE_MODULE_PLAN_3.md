@@ -1,6 +1,6 @@
 # Fire & Smoke Detection Module: Plan
 
-_Created 2026-09-29 · Updated 2026-09-30 (review fixes, round 2) · Owner: Shahen Grigoryan · Lives in the `Shoplifting` repo, runs separately from the theft solution._
+_Created 2026-09-29 · Updated 2026-10-01 (§7: demo UI redesign) · Owner: Shahen Grigoryan · Lives in the `Shoplifting` repo, runs separately from the theft solution._
 
 ---
 
@@ -165,7 +165,7 @@ Until the client gives us access, public live cameras stand in for their camera.
 
 | Source | Use | Status |
 |---|---|---|
-| **Orbeli str., Yerevan** (YouTube live, `https://www.youtube.com/watch?v=BQY5LAmDEVM`) | Stream stability, reconnects, **false alarms** on real footage (sunset glare, orange roofs, crane, haze, night lights) | ✔ Verified 30.09.2026: 1280×720, 30 fps, 0 read errors |
+| **Orbeli str., Yerevan** (YouTube live, `https://www.youtube.com/watch?v=BQY5LAmDEVM`) | Stream stability, reconnects, **false alarms** on real footage (sunset glare, orange roofs, crane, haze, night lights) | ✔ Verified 30.09.2026: 1280×720, 30 fps, 0 read errors. **Default camera** until a camera is saved in the dashboard (`stream.demo_camera` in `fire/config.yaml`) |
 | Fire videos re-streamed as RTSP from the laptop (MediaMTX + ffmpeg loop) | **Real detections**: public cameras never show fire | To set up |
 | Phone as IP camera (IP Webcam app) | Close-range tests: red jacket, flashlight, steam | Optional |
 
@@ -179,6 +179,10 @@ The list lives in `fire/cameras.txt` (`name, url` per line). `fire/tools/stream_
 - [ ] Can we place a laptop or small device on their network, and does it have outbound internet?
 - [ ] Camera brand, model, resolution, indoor or outdoor
 - [ ] Who manages their network (IT contact)
+- [ ] **The login must be a local camera/NVR user, not a cloud app account.** A Hik-Connect, EZVIZ or Dahua DMSS login does not work for RTSP. Ask for a dedicated **view-only** user on the camera/NVR, plus its IP and RTSP port, and confirm RTSP is enabled on the device
+- [ ] Substream set to **H.264** with **stream encryption off** (Hikvision H.265+ or encrypted streams may not decode)
+- [ ] If access is via VPN: the VPN client (WireGuard/OpenVPN) and its config are installed on our machine before the visit; after that it is the normal on-site case
+- Brands other than Hikvision/Dahua, or a non-standard port: paste the full stream URL in the setup form (no auto-discovery for now). RTSP always runs over TCP (`stream.py`), because UDP often fails over VPN/NAT
 
 ---
 
@@ -190,7 +194,8 @@ The list lives in `fire/cameras.txt` (`name, url` per line). `fire/tools/stream_
 - **Fire and smoke are the only active detections.** Other detections are shown **greyed out, "Coming soon"**, so the client sees the roadmap but can't use them.
 - **Defaults everywhere.** Anything that isn't essential for the client lives in `fire/config.yaml`, not in the UI. We can expose more later.
 - **One login** for the demo, no account system.
-- **Setup wizard once** (screens 1–3), then the client always lands on screen 4.
+- **Setup wizard once** (screens 1–3), then the client always lands on screen 4. After setup, "Settings" re-opens the wizard and the step names at the top (Camera / Detections / Alerts) are links, so any step, including Telegram linking, can be opened directly (`/#alerts`).
+- **Real data only on the client's screen.** No fake numbers or simulated events in the product UI. A clickable mockup with mock data exists for design review only (see "Look and feel").
 
 ### Why no API key / Frigate+
 
@@ -200,20 +205,45 @@ Frigate+ (Frigate's paid model-training service) needs an API key; Frigate itsel
 
 | # | Screen | Client sees / does | Kept in `config.yaml` |
 |---|---|---|---|
-| 1 | **Camera** | Camera name, brand (Hikvision / Dahua / Other), IP, username, password, channel, **or paste any stream URL** (RTSP, HTTP/MJPEG, HLS; see §6) · **Test connection** → live snapshot appears · **Save** | sub/main stream, FPS, frame skip, reconnect timing |
+| 1 | **Camera** | Camera name, brand (Hikvision / Dahua / Other), IP, username, password, channel, **or paste any stream URL** (RTSP, HTTP/MJPEG, HLS, YouTube live; see §6) · **Test connection** → live snapshot appears · **Save**. Opens pre-filled with the Orbeli demo camera, marked as a demo. Hints: use the camera/NVR's own user (not the Hik-Connect / EZVIZ / DMSS app login), RTSP enabled, substream H.264; other brands or ports: paste the full URL | sub/main stream, FPS, frame skip, reconnect timing |
 | 2 | **Detections** | ✅ **Fire** (on) · ✅ **Smoke** (on) · 🔒 Intrusion after hours · 🔒 Loitering near equipment · 🔒 Theft / concealment · 🔒 Crowd / unusual gathering · 🔒 Camera tampering: all "Coming soon" | confidence, persistence window, IoU, cooldowns, Qwen model + prompt + timeout |
 | 3 | **Alerts** | QR code + link to our Telegram bot → press **Start** → "✅ Linked as @name" · **Send test alert** | message language, escalation, quiet hours |
-| 4 | **Live + events** (home) | Live view with fire/smoke boxes · status "● Monitoring" + camera health · today's counters (events, confirmed, dismissed) · event list: time, snapshot, type, Qwen verdict + one-line reason, clip · **Real / False alarm** buttons | retention days, clip length, snapshot size |
+| 4 | **Live + events** (home) | **Alert banner** for the newest alert (see below) · live view with fire/smoke boxes, "LIVE" badge, camera name, clock · **Camera disconnected** overlay with reconnect spinner when the stream drops · system tiles: stream fps, detector ms, checks, AI model + calls, reconnects, with trend arrows and "Updated Xs ago" · what is being watched (Fire / Smoke) · today's counters (events, alerts, dismissed) · event timeline: snapshot (click to zoom), status tag, class + time, Qwen reason in its own block, clip, **Real / False alarm** buttons · empty state "No alerts today. System monitoring normally." | retention days, clip length, snapshot size |
 
-A small top bar on every screen: product name, camera status dot, "Settings" (re-opens wizard), logout.
+A top bar on every screen: logo + product name, camera name + brand/IP, status pill ("Monitoring" pulsing green / "Connecting…" amber / "Camera offline" red), a blue **"Demo camera"** pill while the Orbeli demo stream is the source, Live, Settings (re-opens wizard), Log out. On a phone the links collapse to icons.
+
+### Alert banner (screen 4)
+
+The "money shot" of the demo: unmissable at the top of the live screen.
+
+- Shows the **newest event in an alert state** (confirmed / possible / unverified). Text: "🔥 FIRE CONFIRMED • Alert sent to N people • 14:32:07" (N = linked Telegram chats; "Sending alert…" until the notice is actually sent; "FIRE STILL DETECTED", "POSSIBLE FIRE" or "ALERT (NOT VERIFIED)" for the other cases). Second line: Qwen's reason.
+- Orange with a slow continuous pulse for confirmed; amber for possible / unverified.
+- **View clip** opens the 8 s evidence clip in a player (disabled until the clip is written). **Acknowledge** shows a toast and dims the banner (pulse stops).
+- **Limitation:** acknowledge is stored in the browser only (localStorage). There is no backend acknowledge yet, so it is not shared between viewers and not sent to Telegram.
+
+### Look and feel (UI v2, 2026-10-01)
+
+- **Dark "control room" theme only** (reads well on a projector and a phone): ground `#0B0D10`, cards `#13161B`, one accent **fire orange `#FF6B2C`** used only for fire and primary buttons; amber `#FFB02E` possible, blue `#8DB8FF` checking, green `#3DD68C` healthy, red `#F26B6B` offline.
+- **Type:** Geist for text, Geist Mono for numbers, times, IPs (numbers don't jump). Loaded from Google Fonts; without internet it falls back to the system font.
+- **Icons:** inline SVG line icons, no emoji (except 🔥 in the banner title). No CDN scripts: page works on the client's network without internet for anything but fonts.
+- **Motion:** pulsing LIVE / Monitoring dot, pulsing banner, pulsing "Checking…" tag, cards lift on hover, short toasts for actions. All motion off when the OS asks for reduced motion.
+- **Phone:** one column, primary buttons ≥ 56 px tall, system tiles scroll sideways, no horizontal page scroll.
+- **Design references (not the product):** the design canvas (live dashboard, phone, setup, login) and a standalone clickable mockup with mock data and a hidden "🎬 Demo mode" panel (simulate fire / red-jacket false positive / 10× time / camera offline) in `fire/web/mockup/index.html`. Use them to review ideas; the real UI is `fire/web/index.html` + `login.html`.
+
+### Later (needs backend work)
+
+- **Animated boxes + confidence sparkline on the video:** today the boxes are drawn into the MJPEG frames on the server; an overlay needs box coordinates + confidence history in `/api/state`.
+- **Server-side acknowledge** (shared, logged, optionally a Telegram "acknowledged by …" message).
+- **Demo mode in the real app** (inject a fake test event) only if dry runs show we need it. Not the same as the **demo camera** (Orbeli YouTube stream, §6), which already exists and is real footage; the plan is still a real fire video in front of the camera.
 
 ### Event states on screen 4
 
 | State | Colour | Meaning | Telegram |
 |---|---|---|---|
-| Checking… | amber | persistence filter passed, waiting for Qwen | none |
-| Fire confirmed | red | Qwen CONFIRMED (also: a Possible fire upgraded, or "Fire still detected" after cooldown) | photo + 8 s clip + reason |
-| Possible fire | orange | Qwen UNCERTAIN, or Qwen timed out / failed | photo + 8 s clip + "AI not sure" or "not verified" |
+| Checking… | blue, pulsing | persistence filter passed, waiting for Qwen | none |
+| Fire confirmed | fire orange (+ banner) | Qwen CONFIRMED (also: a Possible fire upgraded, or "Fire still detected" after cooldown) | photo + 8 s clip + reason |
+| Possible fire | amber (+ banner) | Qwen UNCERTAIN, or Qwen timed out / failed | photo + 8 s clip + "AI not sure" or "not verified" |
+| Alert (not verified) | amber (+ banner) | run with `--no-qwen`: every event that passes the filter | photo + 8 s clip |
 | Dismissed | grey | Qwen NORMAL (e.g. "red jacket, no flame") | none (dashboard only) |
 
 ### Defaults (config only)
@@ -228,19 +258,21 @@ cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_
 verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, on_timeout: uncertain}   # current theft model for now; tuned later
 alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false, send_uncertain: true}
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
-stream:   {prefer_substream: true}
+stream:   {prefer_substream: true, demo_camera: {name: "Yerevan, Orbeli str.", url: "https://www.youtube.com/watch?v=BQY5LAmDEVM"}}
 ```
 
 ### Demo script (~10 minutes)
 
 1. Open the dashboard on the client's phone or screen (served from our laptop on their network, or from our server), log in (30 s).
 2. Walk through setup: their camera → Test → snapshot; Detections page (point at "Coming soon"); scan QR → Telegram linked (2 min).
-3. Play a fire video on a tablet in front of the camera → boxes on screen 4 → event shows "Checking…" → within ~10 s the phone buzzes with "Fire confirmed", photo, 8 s clip and Qwen's reason.
+3. Play a fire video on a tablet in front of the camera → boxes on screen 4 → event shows "Checking…" → the orange **FIRE CONFIRMED** banner appears and within ~10 s the phone buzzes with "Fire confirmed", photo, 8 s clip and Qwen's reason. Press **View clip**, then **Acknowledge** (banner dims).
 4. **Negative test:** red jacket, phone flashlight, steam from a cup → boxes may flicker; if one passes the filter, the dashboard shows "Checking…" then **Dismissed** with the reason. **The phone stays silent.** This is what convinces people.
 5. Show the event list and the Real / False alarm buttons ("we use your feedback to tune it for your site": for now they only log; tuning is done by us).
 6. Keep a **recorded backup video** in case the network fails.
 
-**Tech:** FastAPI + one HTML page (no frontend framework), live view as MJPEG, events via polling every 2 s. Camera password stays on the machine running the software, never sent to the VLM or Telegram.
+**Tech:** FastAPI + one HTML page (no frontend framework, plain CSS, no CDN scripts), live view as MJPEG, state and events via polling `/api/state` every 2 s. Camera password stays on the machine running the software, never sent to the VLM or Telegram.
+
+**Run / stop:** from the repo root, `fire\.venv\Scripts\python -m fire.run_live` uses the camera saved in the setup, or the Orbeli demo camera if none is saved yet. For a test video: `fire\.venv\Scripts\python -m fire.run_live --source fire/data/BJ9ng9L1CA0.mp4` (add `--no-qwen` to skip AI calls while testing the UI), open `http://localhost:8000`. A video file plays once, then shows "Video ended" and the dashboard stays up; a camera runs until stopped. Stop with **Ctrl + C** in the terminal.
 
 ---
 

@@ -5,6 +5,7 @@ no licence file: fine for the demo, must be resolved before a paid install, plan
 
 --candidates: other published fire/smoke models, into fire/models/candidates/, to compare with
 fire/tools/compare_models.py (step: indoor smoke). Licences differ; see CANDIDATES.
+Gated Hugging Face repos (TommyNgx) need access accepted on the model page and HF_TOKEN in fire/.env.
 
 Usage (from the repo root):
     fire\\.venv\\Scripts\\python fire/models/download.py
@@ -13,8 +14,12 @@ Usage (from the repo root):
 from __future__ import annotations
 
 import argparse
+import os
+import shutil
 import urllib.request
 from pathlib import Path
+
+from dotenv import load_dotenv
 
 FIRE = Path(__file__).resolve().parents[1]
 RAW = "https://github.com/sayedgamal99/Real-Time-Smoke-Fire-Detection-YOLO11/raw/main/"
@@ -49,8 +54,13 @@ def fetch(dest: Path, url: str) -> None:
         return
     dest.parent.mkdir(parents=True, exist_ok=True)
     print(f"download {dest.relative_to(FIRE)} ...", end=" ", flush=True)
+    req = urllib.request.Request(url)
+    token = os.environ.get("HF_TOKEN")
+    if token and url.startswith("https://huggingface.co/"):  # gated repos return 401 without it
+        req.add_header("Authorization", f"Bearer {token}")
     try:
-        urllib.request.urlretrieve(url, dest)
+        with urllib.request.urlopen(req) as r, open(dest, "wb") as f:
+            shutil.copyfileobj(r, f)
         print(f"{dest.stat().st_size / 1e6:.1f} MB")
     except Exception as e:
         dest.unlink(missing_ok=True)
@@ -61,6 +71,7 @@ def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--candidates", action="store_true", help="also fetch the models to compare")
     args = ap.parse_args()
+    load_dotenv(FIRE / ".env")
     for dest, url in FILES.items():
         fetch(dest, url)
     if args.candidates:

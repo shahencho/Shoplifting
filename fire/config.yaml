@@ -1,8 +1,11 @@
 # Fire module defaults (docs/FIRE_MODULE_PLAN_3.md §4 and §7). Not shown in the UI.
 
 model:
-  weights: fire/models/best_nano_111.pt   # fetched by fire/models/download.py
-  imgsz: 640
+  # supakorn_r3e6 (FASDD + hard negatives): sees indoor smoke early (WLNE 2.5 s vs 13.5 s). ~0.4-0.7 s/frame on
+  # CPU at 960; realtime playback skips checks when behind. Licence not stated: resolve before paid install.
+  # Previous default: fire/models/best_nano_111.pt @ 640 (fast, misses indoor smoke).
+  weights: fire/models/candidates/supakorn_r3e6.pt   # fetched by fire/models/download.py --candidates
+  imgsz: 960
   device: cpu
 
 detections:
@@ -22,6 +25,9 @@ alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false,
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
 
 stream:
+  # Used until a camera is saved in the dashboard: the setup form opens pre-filled with it and monitoring starts
+  # on it, so the demo works before the client's camera is connected. Verified 30.09.2026 (plan §6).
+  demo_camera: {name: "Yerevan, Orbeli str.", url: "https://www.youtube.com/watch?v=BQY5LAmDEVM"}
   prefer_substream: true
   max_height: 720          # YouTube / HLS: pick a stream no taller than this
   buffer_s: 10             # ring buffer for evidence clips

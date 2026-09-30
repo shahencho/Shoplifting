@@ -1,0 +1,831 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Fire Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+tailwind.config = {
+  theme: { extend: {
+    colors: { fire: '#FF5722' },
+    fontFamily: { sans: ['Geist', 'system-ui', 'sans-serif'], mono: ['"Geist Mono"', 'ui-monospace', 'monospace'] }
+  } }
+};
+</script>
+<script src="https://unpkg.com/lucide@latest"></script>
+
+<style type="text/tailwindcss">
+  .card        { @apply rounded-2xl bg-[#161B22]/80 ring-1 ring-white/[.06]; }
+  .label       { @apply block text-sm text-slate-400 mb-1.5; }
+  .input       { @apply w-full h-12 px-3.5 rounded-xl bg-[#0D1117] ring-1 ring-white/10 text-slate-100 placeholder:text-slate-500 focus:outline-none focus:ring-2 focus:ring-fire/70; }
+  .btn-primary { @apply h-12 px-5 rounded-xl bg-fire text-[#0D1117] font-semibold inline-flex items-center justify-center gap-2 hover:brightness-110 active:brightness-95 transition disabled:opacity-50; }
+  .btn-ghost   { @apply h-12 px-5 rounded-xl ring-1 ring-white/15 text-slate-100 font-semibold inline-flex items-center justify-center gap-2 hover:bg-white/5 transition disabled:opacity-50; }
+  .navlink     { @apply h-10 px-3 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 inline-flex items-center gap-2 font-medium text-sm transition; }
+  .navlink.active { @apply text-white bg-white/[.07]; }
+  .seg         { @apply h-10 rounded-lg text-sm font-medium text-slate-400 transition hover:text-white; }
+  .seg[aria-pressed="true"] { @apply bg-[#262D3A] text-white; }
+  .chip        { @apply h-11 sm:h-9 px-3 rounded-lg text-xs font-medium ring-1 ring-white/10 text-slate-300 hover:bg-white/5 inline-flex items-center gap-1.5 transition; }
+  .chip-on     { @apply bg-white text-[#0D1117] ring-white hover:bg-white; }
+  .demo-btn    { @apply h-11 px-3 rounded-xl bg-white/[.04] ring-1 ring-white/[.06] hover:bg-white/[.08] text-sm font-medium text-slate-200 inline-flex items-center gap-2 text-left transition; }
+  .step        { @apply flex items-center gap-2 text-slate-400 whitespace-nowrap font-medium; }
+  .step.on     { @apply text-white; }
+  .step-n      { @apply grid place-items-center w-7 h-7 rounded-full ring-1 ring-white/15 font-mono text-xs; }
+  .step.on .step-n   { @apply bg-fire text-[#0D1117] ring-0; }
+  .step.done .step-n { @apply bg-white/10 text-white ring-0; }
+  .step-sep    { @apply h-px w-8 sm:w-12 bg-white/10 shrink-0; }
+</style>
+
+<style>
+  html { background: #0D1117; }
+  body { background: linear-gradient(180deg, #0D1117 0%, #161B22 100%) fixed; min-height: 100vh; }
+  .no-scrollbar { scrollbar-width: none; } .no-scrollbar::-webkit-scrollbar { display: none; }
+  .grid-bg { background-color: #0A0D12;
+    background-image: linear-gradient(rgba(255,255,255,.03) 1px, transparent 1px), linear-gradient(90deg, rgba(255,255,255,.03) 1px, transparent 1px);
+    background-size: 56px 56px; }
+
+  /* LIVE dot: pulses every 2 s */
+  .live-dot { width: 8px; height: 8px; border-radius: 50%; background: #22C55E; animation: livePulse 2s infinite; flex: none; }
+  @keyframes livePulse { 0% { box-shadow: 0 0 0 0 rgba(34,197,94,.7); } 70% { box-shadow: 0 0 0 7px rgba(34,197,94,0); } 100% { box-shadow: 0 0 0 0 rgba(34,197,94,0); } }
+
+  /* Fire banner: continuous pulse, dims when acknowledged */
+  .banner { animation: bannerPulse 2s ease-in-out infinite; transition: opacity .4s, filter .4s; }
+  @keyframes bannerPulse {
+    0%, 100% { background-color: #FF5722; box-shadow: 0 0 0 0 rgba(255,87,34,.55), 0 10px 40px -10px rgba(255,87,34,.6); }
+    50%      { background-color: #FF6A3D; box-shadow: 0 0 0 10px rgba(255,87,34,0), 0 10px 60px -5px rgba(255,87,34,.85); }
+  }
+  .banner.is-ack { animation: none; opacity: .62; filter: saturate(.5); }
+
+  /* Bounding boxes: breathing */
+  .bbox { border: 2px solid #FF5722; border-radius: 6px; animation: breathe 1.8s ease-in-out infinite; }
+  @keyframes breathe { 0%, 100% { box-shadow: 0 0 0 0 rgba(255,87,34,0), inset 0 0 0 0 rgba(255,87,34,0); }
+                       50%      { box-shadow: 0 0 22px 2px rgba(255,87,34,.55), inset 0 0 18px rgba(255,87,34,.25); } }
+  .bbox.suspect { border-color: #FBBF24; animation-name: breatheAmber; }
+  @keyframes breatheAmber { 0%, 100% { box-shadow: 0 0 0 0 rgba(251,191,36,0); } 50% { box-shadow: 0 0 20px 2px rgba(251,191,36,.45); } }
+
+  /* Switches */
+  .switch { position: relative; width: 52px; height: 30px; border-radius: 999px; background: #2A3140; transition: background .2s; flex: none; }
+  .switch::after { content: ""; position: absolute; top: 3px; left: 3px; width: 24px; height: 24px; border-radius: 50%; background: #fff; transition: transform .2s; }
+  .switch[aria-checked="true"] { background: #FF5722; }
+  .switch[aria-checked="true"]::after { transform: translateX(22px); }
+  .mini-switch { position: relative; width: 28px; height: 16px; border-radius: 999px; background: #2A3140; transition: background .2s; }
+  .mini-switch::after { content: ""; position: absolute; top: 2px; left: 2px; width: 12px; height: 12px; border-radius: 50%; background: #CBD5E1; transition: transform .2s; }
+  #demoToggle[aria-checked="true"] .mini-switch { background: #FF5722; }
+  #demoToggle[aria-checked="true"] .mini-switch::after { transform: translateX(12px); background: #fff; }
+
+  /* Toasts */
+  .toast { animation: toastIn .25s ease-out; transition: opacity .3s, transform .3s; }
+  .toast.out { opacity: 0; transform: translateY(-6px); }
+  @keyframes toastIn { from { opacity: 0; transform: translateY(-8px) scale(.98); } to { opacity: 1; transform: none; } }
+
+  dialog::backdrop { background: rgba(0,0,0,.8); }
+
+  @media (prefers-reduced-motion: reduce) { *, *::before, *::after { animation: none !important; transition: none !important; } }
+</style>
+</head>
+<body class="text-slate-100 font-sans antialiased">
+
+<!-- ================= Top bar ================= -->
+<header id="topbar" class="hidden sticky top-0 z-30 border-b border-white/5 bg-[#0D1117]/80 backdrop-blur">
+  <div class="mx-auto max-w-[1440px] px-4 sm:px-6 h-16 flex items-center gap-3 sm:gap-5">
+    <a href="#live" class="flex items-center gap-2.5 shrink-0">
+      <span class="grid place-items-center w-9 h-9 rounded-lg bg-fire shadow-[0_0_24px_rgba(255,87,34,.35)]"><i data-lucide="flame" class="w-5 h-5 text-[#0D1117]"></i></span>
+      <span class="hidden sm:inline font-semibold tracking-tight text-[17px]">Fire Watch</span>
+    </a>
+    <span class="hidden md:block w-px h-6 bg-white/10"></span>
+    <div class="hidden md:flex flex-col leading-tight">
+      <span class="font-medium text-sm">Server room</span>
+      <span class="font-mono text-xs text-slate-400">Hikvision · 192.168.1.64</span>
+    </div>
+    <span id="camPill"></span>
+    <div class="flex-1"></div>
+    <nav class="flex items-center gap-1">
+      <a href="#live" data-nav="live" class="navlink" aria-label="Live"><i data-lucide="activity" class="w-4 h-4"></i><span class="hidden sm:inline">Live</span></a>
+      <a href="#camera" data-nav="camera" class="navlink" aria-label="Setup"><i data-lucide="settings" class="w-4 h-4"></i><span class="hidden sm:inline">Setup</span></a>
+      <button type="button" data-act="logout" class="navlink" aria-label="Log out"><i data-lucide="log-out" class="w-4 h-4"></i><span class="hidden sm:inline">Log out</span></button>
+    </nav>
+  </div>
+</header>
+
+<!-- ================= 1. Login ================= -->
+<section id="view-login" data-view class="hidden min-h-screen grid lg:grid-cols-[1.15fr_1fr]">
+  <div class="relative hidden lg:flex flex-col justify-between p-12 overflow-hidden border-r border-white/5 grid-bg">
+    <div class="absolute -right-40 -bottom-40 w-[520px] h-[520px] rounded-full bg-fire/20 blur-[120px] pointer-events-none"></div>
+    <div class="relative flex items-center gap-3">
+      <span class="grid place-items-center w-10 h-10 rounded-xl bg-fire"><i data-lucide="flame" class="w-5 h-5 text-[#0D1117]"></i></span>
+      <span class="font-semibold text-lg tracking-tight">Fire Watch</span>
+    </div>
+    <div class="relative max-w-xl">
+      <p class="font-mono text-xs text-fire tracking-[.2em] mb-5">VISUAL EARLY WARNING</p>
+      <h1 class="text-5xl xl:text-6xl font-semibold tracking-tight leading-[1.04]">See fire and smoke on the cameras you already have.</h1>
+      <p class="mt-6 text-lg text-slate-400 max-w-md">Every detection is double-checked by AI before anyone's phone buzzes.</p>
+    </div>
+    <div class="relative flex gap-8 text-sm text-slate-300">
+      <span class="flex items-center gap-2"><i data-lucide="cctv" class="w-4 h-4 text-fire"></i>Hikvision · Dahua · RTSP</span>
+      <span class="flex items-center gap-2"><i data-lucide="sparkles" class="w-4 h-4 text-fire"></i>AI verification</span>
+      <span class="flex items-center gap-2"><i data-lucide="send" class="w-4 h-4 text-fire"></i>Telegram alerts</span>
+    </div>
+  </div>
+  <div class="flex items-center justify-center p-6">
+    <form id="loginForm" class="w-full max-w-sm space-y-5">
+      <div class="lg:hidden flex items-center gap-3 mb-8">
+        <span class="grid place-items-center w-10 h-10 rounded-xl bg-fire"><i data-lucide="flame" class="w-5 h-5 text-[#0D1117]"></i></span>
+        <span class="font-semibold text-lg">Fire Watch</span>
+      </div>
+      <div>
+        <h2 class="text-2xl font-semibold tracking-tight">Log in</h2>
+        <p class="mt-1 text-slate-400">Use the demo account you were given.</p>
+      </div>
+      <div><label class="label" for="u">User</label><input id="u" class="input" autocomplete="username" value="admin"></div>
+      <div><label class="label" for="p">Password</label><input id="p" class="input" type="password" autocomplete="current-password" value="demo-password"></div>
+      <button class="btn-primary w-full h-14 text-base">Log in <i data-lucide="arrow-right" class="w-5 h-5"></i></button>
+    </form>
+  </div>
+</section>
+
+<!-- ================= 2. Camera setup ================= -->
+<section id="view-camera" data-view class="hidden mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-12">
+  <ol class="flex items-center gap-2 sm:gap-4 text-sm mb-8 overflow-x-auto no-scrollbar">
+    <li class="step on"><span class="step-n">1</span>Camera</li><li class="step-sep"></li>
+    <li class="step"><span class="step-n">2</span>Detections</li><li class="step-sep"></li>
+    <li class="step"><span class="step-n">3</span>Go live</li>
+  </ol>
+  <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">Connect your camera</h1>
+  <p class="mt-2 text-slate-400">Any Hikvision or Dahua camera on this network, or paste a stream URL.</p>
+
+  <div class="mt-8 grid gap-5 lg:grid-cols-2">
+    <form id="camForm" class="card p-5 sm:p-6 space-y-4" onsubmit="return false">
+      <div><label class="label" for="c-name">Camera name</label><input id="c-name" class="input" value="Server room"></div>
+      <div>
+        <span class="label">Brand</span>
+        <div class="grid grid-cols-3 gap-1 p-1 rounded-xl bg-[#0D1117] ring-1 ring-white/10">
+          <button type="button" class="seg" data-brand="hikvision" aria-pressed="true">Hikvision</button>
+          <button type="button" class="seg" data-brand="dahua" aria-pressed="false">Dahua</button>
+          <button type="button" class="seg" data-brand="other" aria-pressed="false">Other</button>
+        </div>
+      </div>
+      <div class="grid grid-cols-[2fr_1fr] gap-3">
+        <div><label class="label" for="c-ip">IP address</label><input id="c-ip" class="input font-mono" value="192.168.1.64" inputmode="decimal"></div>
+        <div><label class="label" for="c-ch">Channel</label><input id="c-ch" class="input font-mono" value="1" inputmode="numeric"></div>
+      </div>
+      <div class="grid sm:grid-cols-2 gap-3">
+        <div><label class="label" for="c-user">Username</label><input id="c-user" class="input" value="admin" autocomplete="off"></div>
+        <div><label class="label" for="c-pass">Password</label><input id="c-pass" class="input" type="password" value="camera-pass" autocomplete="new-password"></div>
+      </div>
+      <details id="urlDetails" class="group">
+        <summary class="cursor-pointer text-sm text-slate-400 hover:text-white list-none flex items-center gap-1.5"><i data-lucide="chevron-right" class="w-4 h-4"></i>Use a stream URL instead (RTSP, HTTP, HLS)</summary>
+        <input id="c-url" class="input font-mono text-sm mt-3" placeholder="rtsp://user:pass@192.168.1.64:554/Streaming/Channels/102">
+      </details>
+      <div class="grid sm:grid-cols-[auto_1fr] gap-3 pt-2">
+        <button type="button" id="testBtn" class="btn-ghost h-14 sm:h-12"><i data-lucide="plug-zap" class="w-5 h-5"></i>Test connection</button>
+        <a href="#detections" class="btn-primary h-14 sm:h-12">Save and continue <i data-lucide="arrow-right" class="w-5 h-5"></i></a>
+      </div>
+    </form>
+
+    <div class="space-y-3">
+      <div class="relative aspect-video rounded-2xl overflow-hidden grid-bg ring-1 ring-white/[.06]">
+        <div id="snapIdle" class="absolute inset-0 grid place-items-center text-center px-6">
+          <div><i data-lucide="cctv" class="w-8 h-8 mx-auto text-slate-500"></i><p class="mt-3 text-sm text-slate-400">Press <b class="text-slate-200">Test connection</b> to see what the camera sees.</p></div>
+        </div>
+        <div id="snapLoading" class="hidden absolute inset-0 grid place-items-center">
+          <div class="flex items-center gap-3 text-slate-300"><i data-lucide="loader-circle" class="w-5 h-5 animate-spin"></i>Connecting to 192.168.1.64…</div>
+        </div>
+        <canvas id="snapCanvas" width="960" height="540" class="hidden absolute inset-0 w-full h-full"></canvas>
+      </div>
+      <div id="snapOk" class="hidden flex items-center gap-2.5 rounded-xl bg-emerald-500/10 ring-1 ring-emerald-400/20 px-4 py-3 text-emerald-300 font-medium">
+        <i data-lucide="circle-check" class="w-5 h-5"></i>Connected · <span class="font-mono text-sm">1280×720 · 12.4 fps</span>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ================= 3. Detections setup ================= -->
+<section id="view-detections" data-view class="hidden mx-auto max-w-6xl px-4 sm:px-6 py-8 sm:py-12">
+  <ol class="flex items-center gap-2 sm:gap-4 text-sm mb-8 overflow-x-auto no-scrollbar">
+    <li class="step done"><span class="step-n"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>Camera</li><li class="step-sep"></li>
+    <li class="step on"><span class="step-n">2</span>Detections</li><li class="step-sep"></li>
+    <li class="step"><span class="step-n">3</span>Go live</li>
+  </ol>
+  <h1 class="text-3xl sm:text-4xl font-semibold tracking-tight">What should this camera watch for?</h1>
+  <p class="mt-2 text-slate-400">Sensitivity and cooldowns are tuned for your site. You only choose what to watch.</p>
+
+  <div class="mt-8 grid gap-4 sm:grid-cols-2">
+    <div class="card p-5 flex items-start gap-4">
+      <span class="grid place-items-center w-12 h-12 rounded-xl bg-fire/15 ring-1 ring-fire/30 shrink-0"><i data-lucide="flame" class="w-6 h-6 text-fire"></i></span>
+      <div class="flex-1 min-w-0"><p class="font-semibold text-lg">Fire</p><p class="text-sm text-slate-400">Open flames, day or night</p>
+        <p class="mt-2 font-mono text-xs text-slate-400">AI-verified · Telegram alert</p></div>
+      <button type="button" role="switch" aria-checked="true" aria-label="Fire detection" data-det="fire" class="switch"></button>
+    </div>
+    <div class="card p-5 flex items-start gap-4">
+      <span class="grid place-items-center w-12 h-12 rounded-xl bg-slate-400/10 ring-1 ring-slate-400/20 shrink-0"><i data-lucide="cloud" class="w-6 h-6 text-slate-300"></i></span>
+      <div class="flex-1 min-w-0"><p class="font-semibold text-lg">Smoke</p><p class="text-sm text-slate-400">Smoke from something burning</p>
+        <p class="mt-2 font-mono text-xs text-slate-400">AI-verified · Telegram alert</p></div>
+      <button type="button" role="switch" aria-checked="true" aria-label="Smoke detection" data-det="smoke" class="switch"></button>
+    </div>
+  </div>
+
+  <h2 class="mt-10 mb-3 font-mono text-xs tracking-[.18em] text-slate-400">COMING SOON</h2>
+  <div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+    <div class="card p-4 flex items-center gap-3 opacity-60"><i data-lucide="door-open" class="w-5 h-5 text-slate-400"></i><span class="flex-1">Intrusion after hours</span><i data-lucide="lock" class="w-4 h-4 text-slate-500"></i></div>
+    <div class="card p-4 flex items-center gap-3 opacity-60"><i data-lucide="footprints" class="w-5 h-5 text-slate-400"></i><span class="flex-1">Loitering near equipment</span><i data-lucide="lock" class="w-4 h-4 text-slate-500"></i></div>
+    <div class="card p-4 flex items-center gap-3 opacity-60"><i data-lucide="shopping-bag" class="w-5 h-5 text-slate-400"></i><span class="flex-1">Theft / concealment</span><i data-lucide="lock" class="w-4 h-4 text-slate-500"></i></div>
+    <div class="card p-4 flex items-center gap-3 opacity-60"><i data-lucide="users" class="w-5 h-5 text-slate-400"></i><span class="flex-1">Crowd / unusual gathering</span><i data-lucide="lock" class="w-4 h-4 text-slate-500"></i></div>
+    <div class="card p-4 flex items-center gap-3 opacity-60"><i data-lucide="camera-off" class="w-5 h-5 text-slate-400"></i><span class="flex-1">Camera tampering</span><i data-lucide="lock" class="w-4 h-4 text-slate-500"></i></div>
+  </div>
+
+  <div class="mt-10 grid sm:flex gap-3">
+    <a href="#camera" class="btn-ghost h-14 sm:h-12"><i data-lucide="arrow-left" class="w-5 h-5"></i>Back</a>
+    <button type="button" data-act="start" class="btn-primary h-14 sm:h-12 sm:px-8">Start monitoring <i data-lucide="arrow-right" class="w-5 h-5"></i></button>
+  </div>
+</section>
+
+<!-- ================= 4. Live dashboard ================= -->
+<section id="view-live" data-view class="hidden mx-auto max-w-[1440px] px-4 sm:px-6 py-5 space-y-5">
+  <div id="banner"></div>
+
+  <div class="grid gap-5 lg:grid-cols-[minmax(0,1fr)_420px]">
+    <!-- left: video + stats -->
+    <div class="space-y-4 min-w-0">
+      <div class="relative aspect-video rounded-2xl overflow-hidden bg-black ring-1 ring-white/[.06] shadow-[0_20px_60px_-20px_rgba(0,0,0,.8)]">
+        <canvas id="feed" width="1280" height="720" class="absolute inset-0 w-full h-full"></canvas>
+        <div id="boxes" class="absolute inset-0 pointer-events-none"></div>
+        <div class="absolute top-3 left-3 sm:top-4 sm:left-4 flex items-center gap-2">
+          <span id="liveBadge" class="inline-flex items-center gap-2 h-7 px-2.5 rounded-md bg-black/60 backdrop-blur text-xs font-semibold tracking-[.12em]"></span>
+          <span class="hidden sm:inline-flex items-center h-7 px-2.5 rounded-md bg-black/60 backdrop-blur text-xs text-slate-300">Server room</span>
+        </div>
+        <div class="absolute top-3 right-3 sm:top-4 sm:right-4 inline-flex items-center h-7 px-2.5 rounded-md bg-black/60 backdrop-blur font-mono text-[11px] sm:text-xs text-slate-300">
+          <span id="clock">--</span><span id="speedBadge" class="hidden ml-2 px-1.5 rounded bg-sky-400/20 text-sky-300">10×</span>
+        </div>
+        <div class="hidden sm:flex absolute bottom-4 left-4 items-center gap-2 h-7 px-2.5 rounded-md bg-black/60 backdrop-blur font-mono text-[11px] text-slate-400">
+          <i data-lucide="scan-eye" class="w-3.5 h-3.5"></i>YOLO11n · 5 checks/s · AI verify on
+        </div>
+        <div id="offline" class="hidden absolute inset-0 grid place-items-center bg-[#0D1117]/90 ring-2 ring-inset ring-red-500/70 rounded-2xl">
+          <div class="text-center px-6">
+            <div class="mx-auto mb-4 grid place-items-center w-14 h-14 rounded-full bg-red-500/15 ring-1 ring-red-400/40"><i data-lucide="wifi-off" class="w-7 h-7 text-red-400"></i></div>
+            <p class="text-xl sm:text-2xl font-semibold text-red-300">Camera Disconnected</p>
+            <p class="mt-2 text-slate-300 flex items-center justify-center gap-2 text-sm sm:text-base"><i data-lucide="loader-circle" class="w-4 h-4 animate-spin"></i><span id="reconText">Reconnecting…</span></p>
+            <p class="mt-2 hidden sm:block font-mono text-xs text-slate-400">rtsp://192.168.1.64:554/Streaming/Channels/102</p>
+            <p class="mt-3 text-xs text-slate-400">A Telegram notice goes out if the camera stays offline for 2 min.</p>
+          </div>
+        </div>
+      </div>
+
+      <div class="flex items-center justify-between">
+        <h2 class="text-sm font-semibold text-slate-300">System</h2>
+        <span class="inline-flex items-center gap-1.5 font-mono text-xs text-slate-400"><span class="w-1.5 h-1.5 rounded-full bg-emerald-400 animate-pulse"></span><span id="updated">Updated just now</span></span>
+      </div>
+      <div id="stats" class="flex gap-3 overflow-x-auto snap-x snap-mandatory no-scrollbar -mx-4 px-4 pb-1 lg:mx-0 lg:px-0 lg:grid lg:grid-cols-5 lg:overflow-visible"></div>
+
+      <div class="flex flex-wrap items-center gap-2 text-sm">
+        <span class="text-slate-400 mr-1">Watching</span>
+        <span id="watching" class="contents"></span>
+      </div>
+    </div>
+
+    <!-- right: counters + activity -->
+    <aside class="min-w-0 space-y-4">
+      <div class="grid grid-cols-3 gap-3">
+        <div class="card px-4 py-3"><p class="text-xs text-slate-400">Events today</p><p id="n-events" class="font-mono text-3xl font-medium tabular-nums">0</p></div>
+        <div class="card px-4 py-3"><p class="text-xs text-slate-400">Alerts sent</p><p id="n-alerts" class="font-mono text-3xl font-medium tabular-nums text-fire">0</p></div>
+        <div class="card px-4 py-3"><p class="text-xs text-slate-400">Dismissed</p><p id="n-dismissed" class="font-mono text-3xl font-medium tabular-nums">0</p></div>
+      </div>
+      <div class="flex items-baseline justify-between pt-1">
+        <h2 class="font-semibold">Activity</h2>
+        <span class="font-mono text-xs text-slate-400">today · newest first</span>
+      </div>
+      <div id="feedList" class="space-y-6"></div>
+    </aside>
+  </div>
+
+  <footer class="mt-4 pt-5 pb-10 flex flex-wrap items-center justify-between gap-3 text-xs text-slate-400 border-t border-white/5">
+    <span>Fire Watch · visual early warning, in addition to smoke detectors</span>
+    <button type="button" id="demoToggle" data-act="demo-toggle" role="switch" aria-checked="false"
+      class="inline-flex items-center gap-2 h-10 px-3 rounded-lg hover:bg-white/5 font-mono text-[11px] tracking-wider text-slate-400">
+      <span>🎬 DEMO MODE</span><span class="mini-switch"></span>
+    </button>
+  </footer>
+</section>
+
+<!-- ================= Demo panel ================= -->
+<div id="demoPanel" class="hidden fixed z-50 bottom-4 right-4 w-[min(300px,calc(100vw-2rem))] rounded-2xl bg-[#161B22]/95 backdrop-blur ring-1 ring-white/10 shadow-2xl">
+  <div class="flex items-center justify-between pl-4 pr-2 h-12 border-b border-white/5">
+    <span class="font-mono text-xs tracking-wider text-slate-300">🎬 DEMO MODE</span>
+    <button type="button" data-act="demo-toggle" aria-label="Hide demo controls" class="w-10 h-10 grid place-items-center rounded-lg hover:bg-white/5"><i data-lucide="x" class="w-4 h-4"></i></button>
+  </div>
+  <div class="p-3 grid gap-2">
+    <button type="button" data-act="sim-fire" class="demo-btn"><i data-lucide="flame" class="w-4 h-4 text-fire shrink-0"></i>Simulate fire</button>
+    <button type="button" data-act="sim-false" class="demo-btn"><i data-lucide="shirt" class="w-4 h-4 text-red-400 shrink-0"></i>Simulate false positive (red jacket)</button>
+    <button type="button" data-act="speed" class="demo-btn"><i data-lucide="fast-forward" class="w-4 h-4 text-sky-300 shrink-0"></i><span id="speedLabel">Speed up time (10x)</span></button>
+    <div class="grid grid-cols-2 gap-2 pt-2 mt-1 border-t border-white/5">
+      <button type="button" data-act="offline" class="demo-btn text-xs"><i data-lucide="wifi-off" class="w-4 h-4 shrink-0"></i><span id="offLabel">Camera offline</span></button>
+      <button type="button" data-act="reset" class="demo-btn text-xs"><i data-lucide="rotate-ccw" class="w-4 h-4 shrink-0"></i>Reset scene</button>
+      <button type="button" data-act="clear" class="demo-btn text-xs col-span-2"><i data-lucide="trash-2" class="w-4 h-4 shrink-0"></i>Clear all events</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= Clip dialog ================= -->
+<dialog id="clipDlg" class="bg-transparent p-0 w-[min(960px,calc(100vw-2rem))] text-slate-100">
+  <div class="rounded-2xl overflow-hidden bg-[#161B22] ring-1 ring-white/10">
+    <div class="flex items-center justify-between pl-4 pr-2 h-14 border-b border-white/5">
+      <div><p class="font-semibold leading-tight">Evidence clip</p><p id="clipMeta" class="font-mono text-xs text-slate-400"></p></div>
+      <button type="button" data-act="clip-close" aria-label="Close" class="w-11 h-11 grid place-items-center rounded-lg hover:bg-white/5"><i data-lucide="x" class="w-5 h-5"></i></button>
+    </div>
+    <div class="relative aspect-video bg-black">
+      <canvas id="clipCanvas" width="960" height="540" class="absolute inset-0 w-full h-full"></canvas>
+      <span class="absolute top-3 left-3 inline-flex items-center gap-2 h-7 px-2.5 rounded-md bg-black/60 font-mono text-xs"><span class="w-2 h-2 rounded-full bg-red-500"></span>REC · 5 s before + 3 s after</span>
+    </div>
+    <div class="px-4 py-3 flex items-center gap-3">
+      <span id="clipT" class="font-mono text-xs w-10">0:00</span>
+      <div class="flex-1 h-1.5 rounded bg-white/10 overflow-hidden"><div id="clipBar" class="h-full bg-fire" style="width:0"></div></div>
+      <span class="font-mono text-xs">0:08</span>
+    </div>
+  </div>
+</dialog>
+
+<div id="toasts" class="fixed top-20 inset-x-0 z-[60] flex flex-col items-center gap-2 pointer-events-none px-4"></div>
+
+<script>
+/* ---------- helpers ---------- */
+const $ = s => document.querySelector(s), $$ = s => [...document.querySelectorAll(s)];
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const icons = () => { if (window.lucide) lucide.createIcons(); };
+const clamp = (v, a, b) => Math.min(b, Math.max(a, v));
+const pad = n => String(n).padStart(2, '0');
+const fmt = ms => { const d = new Date(ms); return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`; };
+const fmtFull = ms => { const d = new Date(ms); return `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${fmt(ms)}`; };
+const store = {
+  get(k, d) { try { const v = localStorage.getItem('fw.' + k); return v === null ? d : JSON.parse(v); } catch (e) { return d; } },
+  set(k, v) { try { localStorage.setItem('fw.' + k, JSON.stringify(v)); } catch (e) {} }
+};
+
+/* ---------- state (mock data) ---------- */
+const start = new Date(); start.setHours(14, 32, 9, 0);
+const S = {
+  view: null, simMs: start.getTime(), speed: 1,
+  offline: false, recon: { attempt: 1, next: 1 },
+  demo: store.get('demo', false), logged: store.get('logged', false), setupDone: store.get('setup', false),
+  det: { fire: true, smoke: true },
+  fire: true, jacket: false, boxes: [], groups: [], banner: null, seq: 3, clip: null, statsAt: Date.now()
+};
+const later = (ms, fn) => setTimeout(fn, ms / S.speed);
+
+let boxSeq = 0;
+function mkBox(kind, fresh) {
+  const b = kind === 'fire'
+    ? { kind, x: 40, y: 38, w: 16, h: 34, label: 'FIRE', conf: fresh ? .55 : .91, target: .91 }
+    : { kind, x: 24, y: 40, w: 10, h: 36, label: 'FIRE', conf: .44, target: .52 };
+  b.id = 'b' + (++boxSeq);
+  b.hist = fresh ? [b.conf] : Array.from({ length: 40 }, (_, i) => clamp(.6 + .31 * (1 - Math.exp(-i / 8)) + (Math.random() - .5) * .03, 0, 1));
+  return b;
+}
+
+S.groups = [
+  { id: 3, area: 'Rack B3', events: [
+    { state: 'confirmed', kind: 'fire', time: '14:32:07', thumb: 'fire', clip: true, alert: 'Telegram alert sent to 2 people',
+      reason: 'Open flame at the base of rack B3, getting bigger between frames. Light smoke rising toward the ceiling.' },
+    { state: 'checking', kind: 'fire', time: '14:32:04', thumb: 'fire', detail: 'fire 0.87 in 93% of checks over 3 s → 5 frames sent to Qwen' } ] },
+  { id: 2, area: 'Ceiling vent', events: [
+    { state: 'possible', kind: 'smoke', time: '13:05:41', thumb: 'smoke', clip: true, fb: 'false', alert: 'Telegram alert sent: “Possible fire, AI not sure”',
+      reason: 'Thin grey haze near the ceiling vent. Could be smoke or dust in the backlight. Not sure.' },
+    { state: 'checking', kind: 'smoke', time: '13:05:38', thumb: 'smoke', detail: 'smoke 0.58 in 84% of checks over 3 s → 5 frames sent to Qwen' } ] },
+  { id: 1, area: 'UPS panel', events: [
+    { state: 'dismissed', kind: 'fire', time: '11:47:12', thumb: 'light', clip: true, fb: 'false', alert: 'No alert sent · area muted for 60 s',
+      reason: 'Red status light on the UPS panel. No flame and no smoke.' },
+    { state: 'checking', kind: 'fire', time: '11:47:09', thumb: 'light', detail: 'fire 0.41 in 81% of checks over 3 s → 5 frames sent to Qwen' } ] }
+];
+S.banner = { g: 3, time: '14:32:07', ack: false };
+S.boxes = [mkBox('fire')];
+
+const STATS = [
+  { k: 'fps',    label: 'Stream',       unit: 'fps', v: 12.4,  prev: 12.1,  d: 1, good: 'up' },
+  { k: 'det',    label: 'Detector',     unit: 'ms',  v: 38.2,  prev: 41.0,  d: 1, good: 'down' },
+  { k: 'ai',     label: 'AI verdict',   unit: 's',   v: 2.84,  prev: 3.12,  d: 2, good: 'down' },
+  { k: 'checks', label: 'Checks today', unit: '',    v: 18406, prev: 18396, d: 0, good: 'none' },
+  { k: 'up',     label: 'Uptime',       unit: '%',   v: 99.98, prev: 99.98, d: 2, good: 'up' }
+];
+
+/* ---------- live feed (canvas mock of a server room) ---------- */
+const W = 1280, H = 720;
+const scene = document.createElement('canvas'); scene.width = W; scene.height = H;
+const vignette = document.createElement('canvas'); vignette.width = W; vignette.height = H;
+const noise = document.createElement('canvas'); noise.width = noise.height = 256;
+const leds = [];
+(function build() {
+  const c = scene.getContext('2d');
+  let g = c.createLinearGradient(0, 0, 0, H);
+  g.addColorStop(0, '#141b26'); g.addColorStop(.62, '#0e131b'); g.addColorStop(1, '#07090d');
+  c.fillStyle = g; c.fillRect(0, 0, W, H);
+  for (let i = 0; i < 3; i++) {             // ceiling lights
+    const x = 220 + i * 420; g = c.createRadialGradient(x, 30, 5, x, 30, 260);
+    g.addColorStop(0, 'rgba(200,220,255,.16)'); g.addColorStop(1, 'rgba(200,220,255,0)');
+    c.fillStyle = g; c.fillRect(0, 0, W, 320); c.fillStyle = 'rgba(220,235,255,.5)'; c.fillRect(x - 70, 26, 140, 5);
+  }
+  c.strokeStyle = 'rgba(255,255,255,.035)';  // floor
+  for (let i = -12; i <= 12; i++) { c.beginPath(); c.moveTo(W / 2 + i * 22, H * .72); c.lineTo(W / 2 + i * 150, H); c.stroke(); }
+  for (let j = 0; j < 6; j++) { const y = H * .72 + Math.pow(j / 6, 1.8) * H * .28; c.beginPath(); c.moveTo(0, y); c.lineTo(W, y); c.stroke(); }
+  for (let i = 0; i < 7; i++) {             // racks
+    const x = 60 + i * 172, y = 160, w = 124, h = 360;
+    c.fillStyle = '#181f2a'; c.fillRect(x, y, w, h);
+    c.strokeStyle = 'rgba(255,255,255,.07)'; c.strokeRect(x + .5, y + .5, w - 1, h - 1);
+    c.fillStyle = 'rgba(255,255,255,.035)';
+    for (let s = y + 14; s < y + h - 10; s += 18) c.fillRect(x + 8, s, w - 16, 10);
+    for (let k = 0; k < 9; k++) leds.push({ x: x + 14 + (k % 3) * 8, y: y + 18 + Math.floor(k / 3) * 54 + (i % 2) * 18,
+      c: k % 4 === 0 ? '#60a5fa' : '#34d399', p: 300 + Math.random() * 900, o: Math.random() * 6, th: Math.random() * .6 - .2 });
+  }
+  const v = vignette.getContext('2d');
+  g = v.createRadialGradient(W / 2, H / 2, H * .35, W / 2, H / 2, W * .7);
+  g.addColorStop(0, 'rgba(0,0,0,0)'); g.addColorStop(1, 'rgba(0,0,0,.6)'); v.fillStyle = g; v.fillRect(0, 0, W, H);
+  const n = noise.getContext('2d'), img = n.createImageData(256, 256);
+  for (let i = 0; i < img.data.length; i += 4) { const r = Math.random() * 255; img.data[i] = img.data[i + 1] = img.data[i + 2] = r; img.data[i + 3] = 255; }
+  n.putImageData(img, 0, 0);
+})();
+
+function drawFrame(ctx, o, t) {
+  ctx.drawImage(scene, 0, 0);
+  for (const l of leds) { ctx.fillStyle = Math.sin(t / l.p + l.o) > l.th ? l.c : 'rgba(255,255,255,.06)'; ctx.fillRect(l.x, l.y, 4, 3); }
+  if (o.light) { ctx.fillStyle = '#ff3b30'; ctx.beginPath(); ctx.arc(W * .70, H * .60, 5, 0, 7); ctx.fill(); }
+  if (o.smoke || o.fire) {
+    const a = (o.fire ? .10 : .16) + Math.sin(t / 900) * .04;
+    const g = ctx.createRadialGradient(W * .52, H * .22, 10, W * .52, H * .22, 380);
+    g.addColorStop(0, `rgba(190,200,210,${a})`); g.addColorStop(1, 'rgba(190,200,210,0)'); ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+  }
+  if (o.jacket) {
+    const x = W * .29, sway = Math.sin(t / 500) * 2;
+    ctx.fillStyle = '#12151b'; ctx.fillRect(x - 24 + sway, H * .62, 20, H * .135); ctx.fillRect(x + 4 + sway, H * .62, 20, H * .135);
+    ctx.fillStyle = '#b3261e'; ctx.beginPath(); ctx.roundRect(x - 36 + sway, H * .465, 72, H * .165, 14); ctx.fill();
+    ctx.fillStyle = '#c9a07f'; ctx.beginPath(); ctx.arc(x + sway, H * .435, 20, 0, 7); ctx.fill();
+  }
+  if (o.fire) {
+    const cx = W * .48, base = H * .70, f = 1 + Math.sin(t / 90) * .06 + Math.sin(t / 37) * .04 + (Math.random() - .5) * .05;
+    ctx.save(); ctx.globalCompositeOperation = 'lighter';
+    let g = ctx.createRadialGradient(cx, base - 50, 10, cx, base - 50, 280 * f);
+    g.addColorStop(0, 'rgba(255,140,50,.45)'); g.addColorStop(.4, 'rgba(255,87,34,.14)'); g.addColorStop(1, 'rgba(255,87,34,0)');
+    ctx.fillStyle = g; ctx.fillRect(0, 0, W, H);
+    for (let i = 0; i < 7; i++) {
+      const x = cx + (i - 3) * 14 + Math.sin(t / 120 + i) * 6, h = (70 + 55 * Math.sin(t / (80 + i * 9) + i * 1.7) ** 2) * f, w = 28 - Math.abs(i - 3) * 3;
+      const gg = ctx.createLinearGradient(x, base, x, base - h);
+      gg.addColorStop(0, 'rgba(255,230,160,.95)'); gg.addColorStop(.35, 'rgba(255,150,50,.85)'); gg.addColorStop(1, 'rgba(255,70,20,0)');
+      ctx.fillStyle = gg; ctx.beginPath(); ctx.moveTo(x - w / 2, base);
+      ctx.quadraticCurveTo(x - w / 2, base - h * .5, x + Math.sin(t / 60 + i) * 8, base - h);
+      ctx.quadraticCurveTo(x + w / 2, base - h * .5, x + w / 2, base); ctx.closePath(); ctx.fill();
+    }
+    ctx.restore();
+  }
+  ctx.save(); ctx.globalAlpha = .06; ctx.translate(-Math.random() * 256, -Math.random() * 256);
+  ctx._pat = ctx._pat || ctx.createPattern(noise, 'repeat'); ctx.fillStyle = ctx._pat; ctx.fillRect(0, 0, W + 256, H + 256); ctx.restore();
+  ctx.drawImage(vignette, 0, 0);
+}
+
+const fx = $('#feed').getContext('2d'), clipCtx = $('#clipCanvas').getContext('2d');
+let lastDraw = 0, lastReal = performance.now(), lastSec = -1;
+function loop(t) {
+  S.simMs += (t - lastReal) * S.speed; lastReal = t;
+  if (t - lastDraw > 50) {
+    lastDraw = t;
+    if (S.view === 'live' && !S.offline) { fx.setTransform(1, 0, 0, 1, 0, 0); drawFrame(fx, { fire: S.fire, jacket: S.jacket }, t); }
+    if (S.clip) {
+      clipCtx.setTransform(.75, 0, 0, .75, 0, 0); drawFrame(clipCtx, S.clip, t);
+      const p = ((t - S.clip.start) % 8000) / 8000;
+      $('#clipBar').style.width = (p * 100) + '%'; $('#clipT').textContent = '0:0' + Math.floor(p * 8);
+    }
+    const sec = Math.floor(S.simMs / 1000);
+    if (sec !== lastSec) { lastSec = sec; $('#clock').textContent = fmtFull(S.simMs); }
+  }
+  requestAnimationFrame(loop);
+}
+
+/* ---------- rendering ---------- */
+const TAG = {
+  confirmed: 'bg-fire/15 text-[#FF8A5B] ring-1 ring-fire/30',
+  checking:  'bg-sky-400/15 text-sky-300 ring-1 ring-sky-400/30',
+  possible:  'bg-amber-400/15 text-amber-300 ring-1 ring-amber-400/30',
+  dismissed: 'bg-slate-400/10 text-slate-300 ring-1 ring-slate-400/20'
+};
+const DOT  = { confirmed: 'bg-fire', checking: 'bg-sky-400', possible: 'bg-amber-400', dismissed: 'bg-slate-500' };
+const RAIL = { confirmed: 'from-fire', checking: 'from-sky-400', possible: 'from-amber-400', dismissed: 'from-slate-500' };
+const BOXCOL = { confirmed: '#FF5722', checking: '#38BDF8', possible: '#FBBF24', dismissed: '#94A3B8' };
+const RACKS = 'repeating-linear-gradient(90deg, rgba(255,255,255,.05) 0 2px, transparent 2px 22%)';
+const BASE = 'linear-gradient(180deg,#1a2130 0%,#0c0f15 100%)';
+const THUMB = {
+  fire:   { bg: `radial-gradient(ellipse 14% 26% at 48% 64%, #FFD27A 0%, #FF7A2F 40%, rgba(255,87,34,.3) 65%, transparent 80%), radial-gradient(ellipse 45% 45% at 48% 55%, rgba(255,87,34,.3), transparent 70%), ${RACKS}, ${BASE}`, box: [40, 38, 16, 34] },
+  smoke:  { bg: `radial-gradient(ellipse 45% 30% at 52% 22%, rgba(200,210,220,.4), transparent 70%), ${RACKS}, ${BASE}`, box: [36, 8, 32, 30] },
+  light:  { bg: `radial-gradient(circle at 70% 60%, #ff4d4d 0 2%, rgba(255,60,60,.35) 4%, transparent 10%), ${RACKS}, ${BASE}`, box: [66, 52, 8, 16] },
+  jacket: { bg: `radial-gradient(ellipse 5% 11% at 29% 55%, #b3261e 0 90%, transparent 100%), radial-gradient(circle at 29% 43%, #c9a07f 0 2.2%, transparent 2.6%), ${RACKS}, ${BASE}`, box: [24, 38, 10, 38] }
+};
+function thumb(e, cls) {
+  const t = THUMB[e.thumb], [x, y, w, h] = t.box;
+  return `<div class="relative overflow-hidden ${cls}" style="background:${t.bg}">
+    <span class="absolute rounded-sm" style="left:${x}%;top:${y}%;width:${w}%;height:${h}%;border:1.5px solid ${BOXCOL[e.state]}"></span></div>`;
+}
+function tagOf(e) {
+  if (e.state === 'checking') return e.pending ? 'Checking…' : 'Detector triggered';
+  return { confirmed: 'Fire confirmed', possible: 'Possible fire', dismissed: 'Dismissed' }[e.state];
+}
+
+function card(e, g, i) {
+  const final = e.state !== 'checking';
+  return `<div class="relative pl-8">
+    <span class="absolute left-[6px] top-4 w-3 h-3 rounded-full ring-4 ring-[#12161d] ${DOT[e.state]} ${e.pending ? 'animate-pulse' : ''}"></span>
+    <article class="group relative rounded-xl bg-[#1C2230]/70 ring-1 ring-white/[.06] p-3 transition duration-200 hover:-translate-y-1 hover:ring-white/15 hover:shadow-[0_14px_34px_-12px_rgba(0,0,0,.8)]">
+      <div class="pointer-events-none absolute right-full top-0 mr-4 w-72 hidden lg:group-hover:block z-20">
+        ${thumb(e, 'aspect-video rounded-lg ring-1 ring-white/15 shadow-2xl')}
+        <p class="mt-1.5 font-mono text-[11px] text-slate-400">snapshot · ${esc(e.time)} · Server room</p>
+      </div>
+      <div class="flex gap-3">
+        ${thumb(e, 'w-24 h-[54px] shrink-0 rounded-lg ring-1 ring-white/10')}
+        <div class="min-w-0 flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="px-2 py-0.5 rounded-md text-xs font-semibold ${TAG[e.state]} ${e.pending ? 'animate-pulse' : ''}">${tagOf(e)}</span>
+            <span class="font-mono text-xs text-slate-400">${esc(e.kind)} · ${esc(e.time)}</span>
+          </div>
+          ${e.alert ? `<p class="mt-1.5 text-xs text-slate-400 flex items-center gap-1.5"><i data-lucide="${e.state === 'dismissed' ? 'bell-off' : 'send'}" class="w-3.5 h-3.5 shrink-0"></i>${esc(e.alert)}</p>` : ''}
+          ${e.pending ? `<p class="mt-1.5 text-xs text-sky-300 flex items-center gap-1.5"><i data-lucide="loader-circle" class="w-3.5 h-3.5 animate-spin"></i>Qwen is looking at 5 frames…</p>` : ''}
+        </div>
+      </div>
+      ${e.reason ? `<div class="mt-3 rounded-lg bg-white/[.03] px-3 py-2.5">
+        <p class="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-[.16em] text-slate-400 mb-1"><i data-lucide="sparkles" class="w-3 h-3 text-fire"></i>AI reasoning</p>
+        <p class="text-[15px] leading-snug text-slate-100">“${esc(e.reason)}”</p></div>` : ''}
+      ${e.detail ? `<p class="mt-2 font-mono text-[11px] text-slate-400">${esc(e.detail)}</p>` : ''}
+      ${final ? `<div class="mt-3 flex flex-wrap gap-2">
+        ${e.clip ? `<button type="button" data-act="clip" data-g="${g.id}" class="chip"><i data-lucide="play" class="w-3.5 h-3.5"></i>Clip · 8 s</button>` : ''}
+        <button type="button" data-act="fb" data-v="real" data-g="${g.id}" data-i="${i}" class="chip ${e.fb === 'real' ? 'chip-on' : ''}"><i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i>Real</button>
+        <button type="button" data-act="fb" data-v="false" data-g="${g.id}" data-i="${i}" class="chip ${e.fb === 'false' ? 'chip-on' : ''}"><i data-lucide="thumbs-down" class="w-3.5 h-3.5"></i>False alarm</button>
+      </div>` : ''}
+    </article>
+  </div>`;
+}
+
+function renderFeed() {
+  const el = $('#feedList');
+  if (!S.groups.length) {
+    el.innerHTML = `<div class="card px-6 py-10 text-center">
+      <div class="mx-auto mb-4 grid place-items-center w-12 h-12 rounded-full bg-emerald-500/10 ring-1 ring-emerald-400/20"><i data-lucide="shield-check" class="w-6 h-6 text-emerald-400"></i></div>
+      <p class="font-semibold text-lg">No alerts today.</p><p class="mt-1 text-slate-400">System monitoring normally.</p></div>`;
+  } else {
+    el.innerHTML = S.groups.map(g => {
+      const last = g.events[0];
+      return `<section class="relative" aria-label="Incident ${g.id}">
+        <div class="pl-8 mb-2 flex items-center gap-2 font-mono text-[11px] uppercase tracking-wider text-slate-400"><span>Incident ${pad(g.id)}</span><span>·</span><span>${esc(g.area)}</span></div>
+        ${g.events.length > 1 ? `<span class="absolute left-[11px] top-10 bottom-10 w-0.5 rounded-full bg-gradient-to-b ${RAIL[last.state]} to-sky-400/50"></span>` : ''}
+        <div class="space-y-3">${g.events.map((e, i) => card(e, g, i)).join('')}</div></section>`;
+    }).join('');
+  }
+  icons(); renderCounters();
+}
+
+function renderCounters() {
+  const fin = S.groups.map(g => g.events[0]);
+  $('#n-events').textContent = S.groups.length;
+  $('#n-alerts').textContent = fin.filter(e => e.state === 'confirmed' || e.state === 'possible').length;
+  $('#n-dismissed').textContent = fin.filter(e => e.state === 'dismissed').length;
+}
+
+function renderBanner() {
+  const b = S.banner, el = $('#banner');
+  if (!b) { el.innerHTML = ''; return; }
+  el.innerHTML = `<div class="banner ${b.ack ? 'is-ack' : ''} rounded-2xl bg-fire text-[#0D1117] p-4 sm:p-5 flex flex-col md:flex-row md:items-center gap-4" role="alert">
+    <div class="flex items-start gap-3 sm:gap-4 flex-1 min-w-0">
+      <span class="grid place-items-center w-12 h-12 rounded-xl bg-[#0D1117]/15 shrink-0"><i data-lucide="triangle-alert" class="w-6 h-6"></i></span>
+      <div class="min-w-0">
+        <p class="font-bold text-lg sm:text-xl tracking-tight leading-snug">🔥 FIRE CONFIRMED <span class="opacity-50">•</span> Alert sent to 2 people <span class="opacity-50">•</span> <span class="font-mono">${esc(b.time)}</span></p>
+        <p class="mt-0.5 text-sm font-medium opacity-80">Server room · Rack B3 · ${b.ack ? 'Acknowledged at ' + esc(b.ackTime) : 'photo, 8 s clip and AI reason delivered on Telegram'}</p>
+      </div>
+    </div>
+    <div class="grid grid-cols-2 md:flex gap-2 md:gap-3 shrink-0">
+      <button type="button" data-act="clip" data-g="${b.g}" class="h-14 px-5 rounded-xl bg-[#0D1117] text-white font-semibold inline-flex items-center justify-center gap-2 hover:bg-[#1C2230] transition"><i data-lucide="play" class="w-5 h-5"></i>View clip</button>
+      <button type="button" data-act="ack" ${b.ack ? 'disabled' : ''} class="h-14 px-5 rounded-xl ring-2 ring-[#0D1117]/40 font-semibold inline-flex items-center justify-center gap-2 hover:bg-[#0D1117]/10 transition disabled:cursor-default"><i data-lucide="${b.ack ? 'check-check' : 'check'}" class="w-5 h-5"></i>${b.ack ? 'Acknowledged' : 'Acknowledge'}</button>
+    </div></div>`;
+  icons();
+}
+
+function renderBoxes() {
+  $('#boxes').innerHTML = S.boxes.map(b => {
+    const sus = b.kind === 'suspect', col = sus ? '#FBBF24' : '#FF5722';
+    return `<div class="absolute bbox ${sus ? 'suspect' : ''}" style="left:${b.x}%;top:${b.y}%;width:${b.w}%;height:${b.h}%">
+      <span class="absolute -top-7 -left-0.5 inline-flex items-center gap-1 px-2 h-6 rounded-t-md rounded-br-md font-mono text-xs font-semibold text-[#0D1117] whitespace-nowrap" style="background:${col}">
+        <i data-lucide="flame" class="w-3.5 h-3.5"></i>${b.label} <span data-conf="${b.id}">${b.conf.toFixed(2)}</span></span>
+      <div class="hidden sm:block absolute -left-0.5 top-full mt-2 px-2 py-1.5 rounded-md bg-[#0D1117]/85 ring-1 ring-white/10 backdrop-blur">
+        <p class="font-mono text-[10px] text-slate-400">confidence · last 20 s</p>
+        <svg width="132" height="28" viewBox="0 0 132 28" class="block mt-0.5"><polygon data-area="${b.id}" fill="${col}" fill-opacity=".15" points=""></polygon><polyline data-spark="${b.id}" fill="none" stroke="${col}" stroke-width="1.5" stroke-linejoin="round" points=""></polyline></svg>
+      </div></div>`;
+  }).join('');
+  icons(); drawSparks();
+}
+function drawSparks() {
+  for (const b of S.boxes) {
+    const n = 40, off = n - b.hist.length;
+    const pts = b.hist.map((c, i) => `${((off + i) * 132 / (n - 1)).toFixed(1)},${(26 - clamp((c - .3) / .7, 0, 1) * 24).toFixed(1)}`);
+    const line = document.querySelector(`[data-spark="${b.id}"]`), area = document.querySelector(`[data-area="${b.id}"]`), conf = document.querySelector(`[data-conf="${b.id}"]`);
+    if (!line) continue;
+    line.setAttribute('points', pts.join(' '));
+    const x0 = pts[0].split(',')[0];
+    area.setAttribute('points', `${x0},28 ${pts.join(' ')} 132,28`);
+    conf.textContent = b.conf.toFixed(2);
+  }
+}
+function sparkTick() {
+  for (const b of S.boxes) {
+    b.conf = clamp(b.conf + (b.target - b.conf) * .3 + (Math.random() - .5) * .03, 0, .99);
+    b.hist.push(b.conf); if (b.hist.length > 40) b.hist.shift();
+  }
+  drawSparks();
+}
+
+function buildStats() {
+  $('#stats').innerHTML = STATS.map(s => `<div class="snap-start shrink-0 min-w-[150px] lg:min-w-0 card rounded-xl px-4 py-3">
+      <div class="flex items-center justify-between gap-2 text-xs text-slate-400"><span>${s.label}</span><span id="tr-${s.k}" class="font-mono"></span></div>
+      <div class="mt-1 font-mono text-2xl font-medium tabular-nums tracking-tight whitespace-nowrap"><span id="st-${s.k}"></span><span class="text-sm text-slate-400 ml-1">${s.unit}</span></div></div>`).join('');
+  renderStats();
+}
+function renderStats() {
+  for (const s of STATS) {
+    const off = S.offline && (s.k === 'fps' || s.k === 'det');
+    $(`#st-${s.k}`).textContent = off ? '—' : s.k === 'checks' ? Math.round(s.v).toLocaleString('en-US') : s.v.toFixed(s.d);
+    const d = s.v - s.prev, tr = $(`#tr-${s.k}`);
+    let txt = '→', cls = 'text-slate-400';
+    if (!off && Math.abs(d) > 1e-9) {
+      txt = (d > 0 ? '↑ ' : '↓ ') + (s.k === 'checks' ? '+' + Math.round(d) : Math.abs(d).toFixed(s.d));
+      if (s.good !== 'none') cls = (s.good === 'up') === (d > 0) ? 'text-emerald-400' : 'text-amber-300';
+    }
+    tr.textContent = txt; tr.className = 'font-mono ' + cls;
+  }
+}
+function tickStats() {
+  const get = k => STATS.find(s => s.k === k);
+  const fps = get('fps'), det = get('det'), chk = get('checks');
+  fps.prev = fps.v; fps.v = clamp(12.4 + (Math.random() - .5) * .6, 11.8, 12.9);
+  det.prev = det.v; det.v = clamp(det.v + (Math.random() - .5) * 3, 33, 44);
+  chk.prev = chk.v; if (!S.offline) chk.v += 10 * S.speed;
+  S.statsAt = Date.now(); renderStats();
+}
+function setAI(v) { const s = STATS.find(x => x.k === 'ai'); s.prev = s.v; s.v = v; renderStats(); }
+
+function renderStatus() {
+  $('#camPill').innerHTML = S.offline
+    ? `<span class="inline-flex items-center gap-2 h-8 px-3 rounded-full bg-red-500/10 ring-1 ring-red-400/30 text-red-300 text-sm font-medium"><i data-lucide="loader-circle" class="w-3.5 h-3.5 animate-spin"></i>Camera offline</span>`
+    : `<span class="inline-flex items-center gap-2 h-8 px-3 rounded-full bg-emerald-500/10 ring-1 ring-emerald-400/20 text-emerald-300 text-sm font-medium"><span class="live-dot"></span>Monitoring</span>`;
+  $('#liveBadge').innerHTML = S.offline
+    ? `<span class="w-2 h-2 rounded-full bg-red-500"></span><span class="text-red-300">OFFLINE</span>`
+    : `<span class="live-dot"></span>LIVE`;
+  $('#offline').classList.toggle('hidden', !S.offline);
+  $('#boxes').classList.toggle('hidden', S.offline);
+  $('#offLabel').textContent = S.offline ? 'Reconnect camera' : 'Camera offline';
+  icons(); renderStats();
+}
+
+function renderWatching() {
+  const on = [['fire', 'flame', 'Fire', 'text-fire'], ['smoke', 'cloud', 'Smoke', 'text-slate-300']].filter(d => S.det[d[0]]);
+  $('#watching').innerHTML = on.length
+    ? on.map(([, ic, name, c]) => `<span class="inline-flex items-center gap-1.5 h-8 px-3 rounded-full bg-white/[.05] ring-1 ring-white/[.06] font-medium"><i data-lucide="${ic}" class="w-3.5 h-3.5 ${c}"></i>${name}</span>`).join('')
+    : `<span class="text-amber-300">nothing (turn on Fire or Smoke in Setup)</span>`;
+  icons();
+}
+
+function renderDemo() {
+  $('#demoToggle').setAttribute('aria-checked', S.demo);
+  $('#demoPanel').classList.toggle('hidden', !(S.demo && S.view === 'live'));
+  $('#speedLabel').textContent = S.speed === 1 ? 'Speed up time (10x)' : 'Normal speed (1x)';
+  $('#speedBadge').classList.toggle('hidden', S.speed === 1);
+}
+
+function toast(msg, type = 'ok') {
+  const [ic, c] = { ok: ['circle-check', 'text-emerald-400'], info: ['sparkles', 'text-sky-300'], fire: ['flame', 'text-fire'], warn: ['triangle-alert', 'text-amber-300'] }[type];
+  const t = document.createElement('div');
+  t.className = 'toast pointer-events-auto flex items-center gap-2.5 rounded-xl bg-[#1C2230]/95 backdrop-blur ring-1 ring-white/10 shadow-2xl px-4 py-3 text-sm font-medium';
+  t.setAttribute('role', 'status');
+  t.innerHTML = `<i data-lucide="${ic}" class="w-4 h-4 ${c}"></i><span>${esc(msg)}</span>`;
+  $('#toasts').appendChild(t); icons();
+  setTimeout(() => { t.classList.add('out'); setTimeout(() => t.remove(), 300); }, 2600);
+}
+
+/* ---------- demo simulations ---------- */
+function simFire() {
+  if (S.offline) return toast('Camera is offline. Reconnect it first.', 'warn');
+  const id = ++S.seq;
+  S.fire = true;
+  S.boxes = S.boxes.filter(b => b.kind !== 'fire'); S.boxes.push(mkBox('fire', true)); renderBoxes();
+  const g = { id, area: 'Rack B3', events: [{ state: 'checking', pending: true, kind: 'fire', time: fmt(S.simMs), thumb: 'fire',
+    detail: 'fire 0.87 in 93% of checks over 3 s → 5 frames sent to Qwen' }] };
+  S.groups.unshift(g); renderFeed(); toast('Detector triggered · AI is checking…', 'info');
+  later(3000, () => {
+    g.events[0].pending = false;
+    const time = fmt(S.simMs);
+    g.events.unshift({ state: 'confirmed', kind: 'fire', time, thumb: 'fire', clip: true, alert: 'Telegram alert sent to 2 people',
+      reason: 'Open flame at the base of rack B3, getting bigger between frames. Light smoke rising toward the ceiling.' });
+    S.banner = { g: id, time, ack: false };
+    setAI(2.3 + Math.random() * .9); renderFeed(); renderBanner();
+    toast('Fire confirmed · Telegram alert sent to 2 people', 'fire');
+  });
+}
+function simFalse() {
+  if (S.offline) return toast('Camera is offline. Reconnect it first.', 'warn');
+  const id = ++S.seq, box = mkBox('suspect', true);
+  S.jacket = true; S.boxes.push(box); renderBoxes();
+  const g = { id, area: 'Aisle 2', events: [{ state: 'checking', pending: true, kind: 'fire', time: fmt(S.simMs), thumb: 'jacket',
+    detail: 'fire 0.52 in 82% of checks over 3 s → 5 frames sent to Qwen' }] };
+  S.groups.unshift(g); renderFeed(); toast('Detector triggered · AI is checking…', 'info');
+  later(3000, () => {
+    g.events[0].pending = false;
+    g.events.unshift({ state: 'dismissed', kind: 'fire', time: fmt(S.simMs), thumb: 'jacket', clip: true, alert: 'No alert sent · phone stays silent',
+      reason: 'A person in a red jacket walking past the racks. No flame and no smoke anywhere in the frame.' });
+    S.boxes = S.boxes.filter(b => b !== box); renderBoxes();
+    setAI(1.9 + Math.random() * .8); renderFeed();
+    toast('Dismissed by AI · no alert sent', 'ok');
+    later(2500, () => { S.jacket = false; });
+  });
+}
+function openClip(gid) {
+  const g = S.groups.find(x => x.id === gid); if (!g) return;
+  const e = g.events[0];
+  S.clip = { fire: e.thumb === 'fire', smoke: e.thumb === 'smoke', jacket: e.thumb === 'jacket', light: e.thumb === 'light', start: performance.now() };
+  $('#clipMeta').textContent = `Incident ${pad(g.id)} · ${g.area} · ${e.time}`;
+  $('#clipDlg').showModal();
+}
+
+/* ---------- events ---------- */
+document.addEventListener('click', ev => {
+  const b = ev.target.closest('[data-act]');
+  if (!b) { if (ev.target === $('#clipDlg')) $('#clipDlg').close(); return; }
+  const act = b.dataset.act;
+  if (act === 'ack' && S.banner) { S.banner.ack = true; S.banner.ackTime = fmt(S.simMs); renderBanner(); toast('Acknowledged', 'ok'); }
+  if (act === 'clip') openClip(+b.dataset.g);
+  if (act === 'clip-close') $('#clipDlg').close();
+  if (act === 'fb') {
+    const e = S.groups.find(g => g.id === +b.dataset.g).events[+b.dataset.i];
+    e.fb = e.fb === b.dataset.v ? null : b.dataset.v; renderFeed();
+    if (e.fb) toast(e.fb === 'real' ? 'Marked as real · logged for tuning' : 'Marked as false alarm · logged for tuning', 'ok');
+  }
+  if (act === 'demo-toggle') { S.demo = !S.demo; store.set('demo', S.demo); renderDemo(); }
+  if (act === 'sim-fire') simFire();
+  if (act === 'sim-false') simFalse();
+  if (act === 'speed') { S.speed = S.speed === 1 ? 10 : 1; renderDemo(); toast(S.speed === 1 ? 'Normal speed' : 'Time runs 10× faster', 'info'); }
+  if (act === 'offline') {
+    S.offline = !S.offline; S.recon = { attempt: 1, next: 1 };
+    $('#reconText').textContent = 'Reconnecting… attempt 1';
+    renderStatus(); toast(S.offline ? 'Camera disconnected' : 'Camera reconnected', S.offline ? 'warn' : 'ok');
+  }
+  if (act === 'reset') { S.fire = false; S.jacket = false; S.boxes = []; S.banner = null; renderBoxes(); renderBanner(); toast('Scene reset · no active fire', 'ok'); }
+  if (act === 'clear') { S.fire = false; S.jacket = false; S.boxes = []; S.banner = null; S.groups = []; renderBoxes(); renderBanner(); renderFeed(); toast('All events cleared', 'ok'); }
+  if (act === 'start') { S.setupDone = true; store.set('setup', true); location.hash = '#live'; toast('Monitoring started', 'ok'); }
+  if (act === 'logout') { S.logged = false; store.set('logged', false); location.hash = '#login'; }
+});
+$('#clipDlg').addEventListener('close', () => { S.clip = null; });
+
+$('#loginForm').addEventListener('submit', ev => {
+  ev.preventDefault(); S.logged = true; store.set('logged', true);
+  location.hash = S.setupDone ? '#live' : '#camera';
+});
+$$('.seg').forEach(b => b.addEventListener('click', () => {
+  $$('.seg').forEach(x => x.setAttribute('aria-pressed', String(x === b)));
+  if (b.dataset.brand === 'other') $('#urlDetails').open = true;
+}));
+$$('[role=switch][data-det]').forEach(s => s.addEventListener('click', () => {
+  const on = s.getAttribute('aria-checked') !== 'true';
+  s.setAttribute('aria-checked', String(on)); S.det[s.dataset.det] = on; renderWatching();
+}));
+$('#testBtn').addEventListener('click', () => {
+  const b = $('#testBtn');
+  b.disabled = true; b.innerHTML = '<i data-lucide="loader-circle" class="w-5 h-5 animate-spin"></i>Connecting…'; icons();
+  $('#snapIdle').classList.add('hidden'); $('#snapCanvas').classList.add('hidden'); $('#snapOk').classList.add('hidden');
+  $('#snapLoading').classList.remove('hidden');
+  setTimeout(() => {
+    const c = $('#snapCanvas').getContext('2d'); c.setTransform(.75, 0, 0, .75, 0, 0); drawFrame(c, {}, performance.now());
+    $('#snapLoading').classList.add('hidden'); $('#snapCanvas').classList.remove('hidden'); $('#snapOk').classList.remove('hidden');
+    b.disabled = false; b.innerHTML = '<i data-lucide="refresh-cw" class="w-5 h-5"></i>Test again'; icons();
+    toast('Camera connected', 'ok');
+  }, 1400);
+});
+
+/* ---------- routing ---------- */
+function route() {
+  let v = location.hash.slice(1);
+  if (!S.logged) v = 'login';
+  else if (!['camera', 'detections', 'live'].includes(v)) v = S.setupDone ? 'live' : 'camera';
+  if (location.hash.slice(1) !== v) history.replaceState(null, '', '#' + v);
+  S.view = v;
+  $$('[data-view]').forEach(s => s.classList.toggle('hidden', s.id !== 'view-' + v));
+  $('#topbar').classList.toggle('hidden', v === 'login');
+  $$('[data-nav]').forEach(a => a.classList.toggle('active', a.dataset.nav === v || (a.dataset.nav === 'camera' && v === 'detections')));
+  renderDemo(); window.scrollTo(0, 0);
+}
+addEventListener('hashchange', route);
+
+/* ---------- start ---------- */
+buildStats(); renderStatus(); renderBoxes(); renderFeed(); renderBanner(); renderWatching();
+route(); icons();
+requestAnimationFrame(loop);
+setInterval(tickStats, 2000);
+setInterval(sparkTick, 500);
+setInterval(() => { const s = Math.floor((Date.now() - S.statsAt) / 1000); $('#updated').textContent = s < 1 ? 'Updated just now' : `Updated ${s}s ago`; }, 250);
+setInterval(() => {
+  if (!S.offline) return;
+  if (--S.recon.next <= 0) { S.recon.attempt++; S.recon.next = [1, 2, 5, 10][Math.min(S.recon.attempt - 1, 3)]; }
+  $('#reconText').textContent = `Reconnecting… attempt ${S.recon.attempt} · next try in ${S.recon.next} s`;
+}, 1000);
+</script>
+</body>
+</html>

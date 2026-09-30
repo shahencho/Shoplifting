@@ -80,6 +80,11 @@ class Runtime:
         self.realtime_files = realtime_files
         self.log = log
         self.settings = self._load()
+        demo = cfg["stream"].get("demo_camera")
+        self.demo_url = demo["url"] if demo else ""
+        if demo and not self.settings.get("camera"):     # in memory only; saved once the client saves a camera
+            self.settings["camera"] = {"name": demo["name"], "brand": "other", "ip": "", "user": "", "password": "",
+                                       "channel": "1", "url": demo["url"], "substream": True}
         self.enabled = self.settings.setdefault(
             "detections", {c: d.get("enabled", True) for c, d in cfg["detections"].items()})
         m = cfg["model"]
@@ -91,6 +96,7 @@ class Runtime:
         self.out_dir: Path | None = None
         self.source = ""
         self.name_override: str | None = None       # --name / --source from the command line
+        self.closing = False                        # set on shutdown: ends live-view streams
         self.latest_jpeg: bytes | None = None
         self.started_at: float | None = None
         self._thread: threading.Thread | None = None
@@ -204,6 +210,7 @@ class Runtime:
                          "confirmed": sum(e.state == "confirmed" for e in evs),
                          "dismissed": sum(e.state == "dismissed" for e in evs)},
             "detections": self.enabled, "setup_done": bool(self.settings.get("setup_done")),
+            "demo": bool(self.demo_url) and self.source == self.demo_url,
         }
 
     def events(self) -> list[dict]:
@@ -216,6 +223,20 @@ class Runtime:
                 d["files"].pop(k, None)
             out.append(d)
         return out
+
+    def acknowledge(self, n: int) -> bool:
+        """Stop alerts and reminders for the ongoing fire (re-arms when it is gone)."""
+        if not self.pipeline:
+            return False
+        with self.pipeline.lock:
+            for e in self.pipeline.events:
+                if e.n == n:
+                    self.pipeline.em.acknowledge(e)
+                    self.pipeline.save_event(e)
+                    self.log(f"[E{n}] acknowledged: no more alerts until the fire is gone for "
+                             f"{self.pipeline.em.rearm_after_s:.0f} s")
+                    return True
+        return False
 
     def feedback(self, n: int, value: str) -> bool:
         if not self.pipeline or value not in ("real", "false", ""):

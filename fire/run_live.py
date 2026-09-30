@@ -55,14 +55,15 @@ def main() -> None:
     load_dotenv(FIRE / ".env")
     from fire.alerts.telegram import from_env
     from fire.runtime import Runtime
+    from fire.stream import is_file, split_start
 
     cfg = load_config(Path(args.config))
     cams = load_cameras()
     source, name = args.source, args.name
     if source in cams:
         name, source = name or source, cams[source]
-    elif source and Path(source).is_file():
-        name = name or Path(source).stem
+    elif source and is_file(source):
+        name = name or Path(split_start(source)[0]).stem
     elif source:
         name = name or "camera"
 
@@ -90,11 +91,18 @@ def main() -> None:
         from fire.web.app import create_app
 
         print(f"Dashboard: http://localhost:{args.port}  (same network: http://<this-computer-ip>:{args.port})")
-        uvicorn.run(create_app(rt), host=args.host, port=args.port, log_level="warning")
+        try:
+            # graceful timeout: open live-view connections must not hold Ctrl+C
+            uvicorn.run(create_app(rt), host=args.host, port=args.port, log_level="warning",
+                        timeout_graceful_shutdown=2)
+        except KeyboardInterrupt:
+            pass
+        rt.closing = True
+        print("\nStopping...", flush=True)
         rt.stop()
 
     if rt.telegram:
-        rt.telegram.flush()
+        rt.telegram.flush(timeout=10)          # finish an alert being sent, but don't hang
     if rt.pipeline:
         evs = rt.pipeline.events
         print(f"\nEvents: {len(evs)}  " + "  ".join(f"E{e.n} t={e.t:.0f}s {e.state}" for e in evs))
