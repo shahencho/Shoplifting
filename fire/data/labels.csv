@@ -1,0 +1,4 @@
+video,label,smoke_visible_s,flame_visible_s,setting,source,notes
+BJ9ng9L1CA0.mp4,fire,2,14,indoor locker room,https://www.youtube.com/watch?v=BJ9ng9L1CA0,"WLNE security cam, 5:16, 360p. Thin white smoke from equipment 2-13 s, flames burst 14 s, flashover ~120 s, IR night mode from ~150 s"
+street_car_fire_cctv.mp4,fire,,,outdoor night street,github sayedgamal99 sample,"onset not labelled yet"
+police_car_fire_cctv.mp4,fire,,,outdoor night parking,github sayedgamal99 sample,"onset not labelled yet"

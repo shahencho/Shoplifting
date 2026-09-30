@@ -95,7 +95,7 @@ def main() -> None:
             shown = draw_boxes(frame, boxes)
             if writer is None:
                 h, w = frame.shape[:2]
-                writer = cv2.VideoWriter(str(out_dir / "annotated.mp4"), cv2.VideoWriter_fourcc(*"mp4v"),
+                writer = cv2.VideoWriter(str(out_dir / "annotated.mp4"), cv2.VideoWriter_fourcc(*"avc1"),
                                          checks_per_s, (w, h))
                 print(f"Stream: {w}x{h}, {stream.fps:.0f} fps declared, {checks_per_s} checks/s")
             writer.write(shown)

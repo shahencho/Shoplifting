@@ -36,6 +36,18 @@ fire\.venv\Scripts\python -m fire.tools.stream_check "<url>"
 
 Prints resolution, declared FPS, read rate, read errors and OK/FAIL; saves a first frame to `fire/outputs/stream_check/`.
 
+## Technical test report (offline)
+
+```powershell
+fire\.venv\Scripts\python -m fire.eval_offline                                 # every video in fire/data
+fire\.venv\Scripts\python -m fire.eval_offline fire/data/BJ9ng9L1CA0.mp4 --ratio 0.5 --tag r05
+```
+
+Runs the detector once per video (cached in `fire/outputs/eval/cache/`), replays the persistence filter and
+alert cooldowns, and writes `fire/outputs/eval/<time>_<tag>/report.html`: summary per video, a settings
+sweep, and per video a timeline (hover for values, click to seek), the annotated video and every alert
+with its snapshot. Internal tool, not the client demo UI. Labels: `fire/data/labels.csv`.
+
 ## Tests
 
 ```powershell

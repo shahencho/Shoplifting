@@ -1,6 +1,7 @@
 # Fire module ignores (the root .gitignore is not edited, see docs/FIRE_MODULE_PLAN_3.md rule 1)
 .venv/
 models/*.pt
-data/
+data/*
+!data/labels.csv
 outputs/
 .env

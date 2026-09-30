@@ -52,12 +52,14 @@ Shoplifting/
 │   ├── stream.py                 # RTSP/file reader thread, reconnect, 10 s ring buffer
 │   ├── detector.py               # detect_fire(frame) -> boxes   (swappable)
 │   ├── temporal.py               # persistence filter (≥ 80% of checks over 3 s)
+│   ├── events.py                 # alerts, cooldowns, "still detected" (Qwen verdicts plug in, step 3)
 │   ├── verify.py                 # Qwen call + parse (copied from src/vlm.py, adapted)
 │   ├── evidence.py               # snapshot + clip, frozen at trigger time (5 s before + 3 s after)
 │   ├── alerts/telegram.py        # bot: /start linking, sendPhoto, sendVideo
 │   ├── web/                      # demo dashboard (see §7)
 │   ├── run_live.py               # entry point: --source rtsp://... or a video file
-│   ├── eval_offline.py           # run on a folder of videos, count TP / FP / latency
+│   ├── eval_offline.py           # technical test: cached detections, filter replay, settings sweep
+│   ├── eval_report.py            # report.html for it (internal, not the demo UI)
 │   ├── tests/
 │   ├── .gitignore                # .venv/, models/*.pt, data/, outputs/, .env
 │   ├── data/                     # test videos: fire + tricky negatives (gitignored)
