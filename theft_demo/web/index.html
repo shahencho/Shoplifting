@@ -349,7 +349,7 @@ function toast(text){
   setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, 2400);
 }
 
-const STATE = {checking:["Checking…","AI is looking at the 5 frames"], confirmed:["Theft confirmed",""], possible:["Possible theft",""],
+const STATE = {checking:["Checking…","AI is looking at the 5 frames"], confirmed:["Likely theft",""], possible:["Possible theft",""],
                dismissed:["All clear","AI: normal shopping, no alert"]};
 const CAMSTATE = {ok:["ok","Monitoring"], connecting:["wait","Starting…"], finishing:["wait","Video ended · AI answering"],
                   not_configured:["", "No recording"], ended:["", "Video ended"], stopped:["", "Stopped"],
@@ -517,7 +517,7 @@ function drawBanner(){
   if (!e){ el.innerHTML = ""; return; }
   const conf = e.state === "confirmed", clip = (e.files || {}).clip, tm = e.timing || {};
   const alerted = e.sent.some(k => k === "alert" || k === "upgrade");
-  const head = conf ? "THEFT CONFIRMED" : e.verdict === "UNCERTAIN" ? "POSSIBLE THEFT" : "POSSIBLE THEFT (NOT VERIFIED)";
+  const head = conf ? "LIKELY THEFT" : e.verdict === "UNCERTAIN" ? "POSSIBLE THEFT" : "POSSIBLE THEFT (NOT VERIFIED)";
   const sent = !alerted ? "Same incident: already alerted"
              : !chats ? (S.telegram.enabled ? "Not sent: no one linked to Telegram" : "Not sent: Telegram not set up")
              : `Alert sent to ${chats} ${chats === 1 ? "person" : "people"}${tm.act_to_alert_s ? ` ${secs(tm.act_to_alert_s)} after the act` : ""}`;

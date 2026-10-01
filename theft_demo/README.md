@@ -72,7 +72,7 @@ Output per run: `theft_demo/outputs/live/<video>_<time>/`
 - The first check sends **one silent note**: "🟡 Suspicious movement, checking…".
 - Checks within the next 20 s join the incident, and so do later checks of the same person while the incident is open. Joining checks send no new message.
 - The incident ends with **one reply** to that note:
-  - "🚨 Theft confirmed" or "⚠️ Possible theft", with photo, clip, reason and timing, as soon as any check says so;
+  - "🚨 Likely theft" or "⚠️ Possible theft", with photo, reason and timing, then the clip captioned "🎥 Main evidence", as soon as any check says so (never "confirmed": the AI can be wrong);
   - otherwise "✅ all clear", once every check came back normal.
 - After an alert, a 30 s cooldown: new checks still show on the dashboard, but no new note is sent.
 

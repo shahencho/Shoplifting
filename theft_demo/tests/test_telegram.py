@@ -44,7 +44,7 @@ def test_note_is_silent_and_alert_and_clear_reply_to_it(tmp_path):
     tg.notify("alert", c)
     tg.flush()
     alert = tg.sent("sendMessage")[-1]
-    assert alert["text"].startswith("🚨 Theft confirmed") and alert["reply_to_message_id"] == note_id
+    assert alert["text"].startswith("🚨 Likely theft") and alert["reply_to_message_id"] == note_id
     assert "disable_notification" not in alert and "item into the pocket" in alert["text"]
 
     c2 = check()
@@ -76,3 +76,19 @@ def test_link_shows_start_again_in_an_existing_chat_and_start_with_parameter_lin
         time.sleep(0.05)
     tg._stop.set()
     assert [c["name"] for c in tg.chats] == ["@shop"]
+
+
+def test_alert_clip_is_captioned_as_the_main_evidence(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", [{"id": 5, "name": "@a"}])
+    c = check()
+    for name in ("snapshot.jpg", "clip.mp4"):
+        (tmp_path / name).write_bytes(b"x")
+    c.files.update({"snapshot_path": str(tmp_path / "snapshot.jpg"), "clip_path": str(tmp_path / "clip.mp4")})
+    c.msg_ids["5"] = 42
+    c.state, c.verdict, c.reason, c.qwen_s = "confirmed", "CONFIRMED", "item into the pocket", 40.0
+    c.alert_time = time.time()
+    tg.notify("alert", c)
+    tg.flush()
+    photo, video = tg.sent("sendPhoto")[-1], tg.sent("sendVideo")[-1]
+    assert photo["caption"].startswith("🚨 Likely theft") and "confirmed" not in photo["caption"].lower()
+    assert video["caption"] == "🎥 Main evidence" and video["reply_to_message_id"] == 42

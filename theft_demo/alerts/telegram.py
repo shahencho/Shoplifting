@@ -31,8 +31,10 @@ STATE = DEMO / "state" / "telegram.json"
 
 TEXT = {
     "en": {
-        "confirmed": "🚨 Theft confirmed", "possible_uncertain": "⚠️ Possible theft (AI not sure)",
-        "possible_unverified": "⚠️ Possible theft (not verified)", "upgrade": "🚨 Theft confirmed (was: possible theft)",
+        # the AI can be wrong: "likely", never "confirmed"
+        "confirmed": "🚨 Likely theft", "possible_uncertain": "⚠️ Possible theft (AI not sure)",
+        "possible_unverified": "⚠️ Possible theft (not verified)", "upgrade": "🚨 Likely theft (was: possible theft)",
+        "clip": "🎥 Main evidence",
         "early": "🟡 Suspicious movement, checking…", "clear": "✅ Checked: no theft, all clear",
         "offline": "📷 Camera offline for {min} min", "online": "📷 Camera back online",
         "test": "✅ Test alert from the theft demo. Alerts will arrive here.",
@@ -41,9 +43,10 @@ TEXT = {
         "cmd_start": "Get theft alerts in this chat", "cmd_stop": "Stop theft alerts",
     },
     "hy": {
-        "confirmed": "🚨 Գողությունը հաստատված է", "possible_uncertain": "⚠️ Հնարավոր գողություն (ԱԲ-ն վստահ չէ)",
+        "confirmed": "🚨 Հավանական գողություն", "possible_uncertain": "⚠️ Հնարավոր գողություն (ԱԲ-ն վստահ չէ)",
         "possible_unverified": "⚠️ Հնարավոր գողություն (չստուգված)",
-        "upgrade": "🚨 Գողությունը հաստատված է (նախկինում՝ հնարավոր գողություն)",
+        "upgrade": "🚨 Հավանական գողություն (նախկինում՝ հնարավոր գողություն)",
+        "clip": "🎥 Հիմնական ապացույց",
         "early": "🟡 Կասկածելի շարժում, ստուգում ենք…", "clear": "✅ Ստուգված է՝ գողություն չկա, ամեն ինչ կարգին է",
         "offline": "📷 Տեսախցիկն անջատված է {min} րոպե", "online": "📷 Տեսախցիկը կրկին միացված է",
         "test": "✅ Փորձնական ծանուցում գողության դեմոյից։ Ահազանգերը կգան այստեղ։",
@@ -230,8 +233,8 @@ class TelegramNotifier(Notifier):
                     self._call("sendMessage", data={"chat_id": chat["id"], "text": caption, **reply})
                 if kind == "alert" and clip and Path(clip).exists():
                     with open(clip, "rb") as f:
-                        self._call("sendVideo", data={"chat_id": chat["id"], "supports_streaming": "true", **reply},
-                                   files={"video": f})
+                        self._call("sendVideo", data={"chat_id": chat["id"], "caption": t["clip"],
+                                                      "supports_streaming": "true", **reply}, files={"video": f})
             print(f"[telegram] {kind} E{ev.n} -> {self._each(kind, send)} chat(s)", flush=True)
         else:
             text = t.get(kind, kind).format(**info)
