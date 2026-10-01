@@ -1,12 +1,15 @@
 """Demo dashboard (plan §7): FastAPI + one HTML page. One login, no accounts.
 
 Login: DEMO_USER / DEMO_PASSWORD from fire/.env. If they are not set, the user is "admin" and a random
-password is printed at start-up.
+password is printed at start-up. A login lasts SESSION_HOURS and survives restarts and deploys
+(fire/state/sessions.json keeps hashes of the session tokens, never the tokens).
 """
 from __future__ import annotations
 
 import base64
+import hashlib
 import io
+import json
 import os
 import secrets
 import time
@@ -21,6 +24,45 @@ from fire.stream import is_file
 WEB = Path(__file__).resolve().parent
 COOKIE = "fire_session"
 VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
+SESSION_HOURS = 8
+SESSIONS = FIRE / "state" / "sessions.json"
+
+
+class Sessions:
+    """Logged-in browsers: sha256(token) -> expiry (unix time), saved to a file so restarts keep them."""
+
+    def __init__(self, path: Path, hours: float = SESSION_HOURS):
+        self.path, self.ttl = path, hours * 3600
+        try:
+            self._exp = {k: float(v) for k, v in json.loads(path.read_text(encoding="utf-8")).items()}
+        except (OSError, ValueError, AttributeError):
+            self._exp = {}
+
+    @staticmethod
+    def _key(token: str) -> str:
+        return hashlib.sha256(token.encode()).hexdigest()
+
+    def new(self) -> str:
+        token = secrets.token_urlsafe(24)
+        self._exp[self._key(token)] = time.time() + self.ttl
+        self._save()
+        return token
+
+    def valid(self, token: str | None) -> bool:
+        return bool(token) and self._exp.get(self._key(token), 0) > time.time()
+
+    def drop(self, token: str | None) -> None:
+        if token and self._exp.pop(self._key(token), None) is not None:
+            self._save()
+
+    def _save(self) -> None:
+        now = time.time()
+        self._exp = {k: v for k, v in self._exp.items() if v > now}
+        try:
+            self.path.parent.mkdir(parents=True, exist_ok=True)
+            self.path.write_text(json.dumps(self._exp), encoding="utf-8")
+        except OSError as e:
+            print(f"[web] could not save sessions: {e}", flush=True)
 
 
 def create_app(rt: Runtime) -> FastAPI:
@@ -30,17 +72,17 @@ def create_app(rt: Runtime) -> FastAPI:
     if not password:
         password = secrets.token_urlsafe(8)
         print(f"[web] DEMO_PASSWORD not set in fire/.env; this run's login: {user} / {password}", flush=True)
-    sessions: set[str] = set()
+    sessions = Sessions(SESSIONS)
 
     def auth(request: Request) -> None:
-        if request.cookies.get(COOKIE) not in sessions:
+        if not sessions.valid(request.cookies.get(COOKIE)):
             raise HTTPException(401, "login required")
 
     # --- pages ---
 
     @app.get("/", response_class=HTMLResponse)
     def index(request: Request):
-        page = "index.html" if request.cookies.get(COOKIE) in sessions else "login.html"
+        page = "index.html" if sessions.valid(request.cookies.get(COOKIE)) else "login.html"
         return HTMLResponse((WEB / page).read_text(encoding="utf-8"))
 
     @app.post("/api/login")
@@ -49,15 +91,13 @@ def create_app(rt: Runtime) -> FastAPI:
                 and secrets.compare_digest(str(body.get("password", "")), password)):
             time.sleep(1)
             raise HTTPException(401, "wrong user or password")
-        token = secrets.token_urlsafe(24)
-        sessions.add(token)
         resp = JSONResponse({"ok": True})
-        resp.set_cookie(COOKIE, token, httponly=True, samesite="lax", max_age=30 * 24 * 3600)
+        resp.set_cookie(COOKIE, sessions.new(), httponly=True, samesite="lax", max_age=int(sessions.ttl))
         return resp
 
     @app.post("/api/logout")
     def logout(request: Request):
-        sessions.discard(request.cookies.get(COOKIE, ""))
+        sessions.drop(request.cookies.get(COOKIE))
         resp = JSONResponse({"ok": True})
         resp.delete_cookie(COOKIE)
         return resp
