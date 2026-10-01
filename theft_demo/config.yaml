@@ -1,0 +1,46 @@
+# Theft demo defaults. Plan: C:\Users\Shahen\.claude\plans (theft demo, option B); README: theft_demo/README.md.
+# Frozen: trigger values are a copy of the root config.yaml (main @ 3658a44) with trigger_mode: episode.
+
+perception:                   # used by precompute.py only (YOLO runs once per video, playback replays it)
+  det_model: yolo11n.pt
+  pose_model: yolo11n-pose.pt
+  tracker: bytetrack.yaml
+  conf: 0.35
+  imgsz: 640
+  target_fps: 10              # checks per second of video; playback uses the same stride
+  # carryable COCO classes for the near-object cue (24 backpack, 26 handbag, 28 suitcase, 39-55 bottles/cups/food,
+  # 63-67 electronics, 73 book, 75-79 small objects)
+  object_classes: [24, 26, 28, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 52, 53, 54, 55,
+                   63, 64, 65, 66, 67, 73, 75, 76, 77, 78, 79]
+
+trigger:
+  trigger_mode: episode
+  buffer_seconds: 5.0
+  dwell_seconds: 3.0
+  object_distance_ratio: 0.3
+  hand_to_body_ratio: 0.3
+  cooldown_seconds: 10.0      # paza mode only
+  clip_frames: 5
+  crop_padding: 0.2
+  keypoint_conf: 0.3
+  motion_seconds: 0.5
+  min_approach_ratio: 0.05
+  post_trigger_seconds: 1.5   # paza mode only
+  episode_gap_seconds: 2.0    # an episode closes this long after the person's last cue -> the check starts
+  episode_max_seconds: 6.0
+  episode_margin_seconds: 0.5
+
+per_person: {stop_on: [CONFIRMED], max_calls: 3}   # as store_sim: a flagged person gets no more checks
+
+verify: {model: qwen/qwen3.6-plus, frames: 5, max_side: 640, jpeg_quality: 85, timeout_s: 180, max_tokens: 16000,
+         max_parallel: 8, on_timeout: possible}     # TIMEOUT / ERROR -> "Possible theft (not verified)"; 8 parallel: d4WZ queued up to 98 s with 4
+
+incident: {join_s: 20}        # checks starting within this long of an incident's first check share its Telegram note
+
+cooldown: {after_alert_s: 30, allow_upgrade: true}  # after an alert: no new incident / note for 30 s
+
+alerts: {language: hy, early_note: {enabled: true, silent: true}}
+
+evidence: {before_s: 2, after_s: 2}   # clip = episode start - before_s ... check start + after_s
+
+stream: {buffer_s: 15, buffer_fps: 10}

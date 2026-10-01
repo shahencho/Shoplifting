@@ -1,0 +1,16 @@
+# Theft demo: its own venv (theft_demo/.venv), separate from theft's root .venv and fire/.venv.
+#   python -m venv theft_demo/.venv
+#   theft_demo.venvScriptspython -m pip install -r theft_demo/requirements.txt
+opencv-python>=4.9
+numpy>=1.26
+ultralytics>=8.3
+yt-dlp>=2025.1
+pyyaml>=6.0
+python-dotenv>=1.0
+openai>=1.40
+requests>=2.31
+fastapi>=0.110
+uvicorn>=0.29
+pytest>=8.0
+qrcode>=7.4
+lap>=0.5.12              # ByteTrack dependency (ultralytics installs it on first use otherwise)

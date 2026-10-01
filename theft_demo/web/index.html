@@ -1,0 +1,606 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theft Watch</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#0B0D10;--bar:#0E1115;--card:#13161B;--card2:#1A1E24;--card3:#232830;--ink:#ECEEF1;--ink2:#A3A9B3;
+  --muted:#7C838E;--line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);--accent:#FF6B2C;--accent-ink:#FF8A5B;
+  --ok:#3DD68C;--amber:#FFB02E;--blue:#8DB8FF;--bad:#F26B6B;--grey:#A3A9B3;
+  --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Geist Mono",ui-monospace,Consolas,monospace}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:linear-gradient(180deg,#0B0D10,#11151B) fixed;color:var(--ink);font:15px/1.45 var(--sans);min-height:100vh}
+.mono{font-family:var(--mono)}.muted{color:var(--muted)}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a,button.link{color:var(--ink2);background:none;border:0;font:inherit;cursor:pointer;padding:0;text-decoration:none}
+
+/* header */
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:0 20px;height:64px;
+  background:rgba(14,17,21,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:700;font-size:16px;letter-spacing:-.01em}
+.logo{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--accent);color:#0B0D10;
+  box-shadow:0 0 24px rgba(255,107,44,.35)}
+.vsep{width:1px;height:24px;background:var(--line2)}
+.camhdr{display:flex;flex-direction:column;line-height:1.2}.camhdr b{font-size:14px;font-weight:600}
+.camhdr span{font:12px var(--mono);color:var(--muted)}
+header .sp{flex:1}
+nav{display:flex;gap:4px}
+nav a,nav button{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-radius:8px;color:var(--ink2);font-weight:500;font-size:14px}
+nav a:hover,nav button:hover{color:var(--ink);background:rgba(255,255,255,.05)}nav a.on{color:var(--ink);background:var(--card2)}
+.pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;
+  background:rgba(255,255,255,.05);color:var(--ink2);white-space:nowrap}
+.pill.ok{background:rgba(61,214,140,.1);color:var(--ok)}.pill.bad{background:rgba(242,107,107,.12);color:var(--bad)}
+.pill.wait{background:rgba(255,176,46,.12);color:var(--amber)}
+.pill.demo{background:rgba(141,184,255,.12);color:var(--blue)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+main{max-width:1400px;margin:0 auto;padding:20px}
+.wiz{max-width:1000px;margin:0 auto;padding-top:16px}
+
+/* wizard */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+.steps{display:flex;align-items:center;gap:10px;margin:0 0 22px;padding:0;list-style:none;font-size:14px;color:var(--muted);overflow-x:auto}
+.steps li{display:flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.steps li+li::before{content:"";width:28px;height:1px;background:var(--line2);margin-right:2px}
+.steps a{display:flex;align-items:center;gap:8px;color:inherit;padding:6px 8px;margin:-6px -8px;border-radius:8px}.steps a:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+.steps .n{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--line2);font:12px var(--mono)}
+.steps .on{color:var(--ink)}.steps .on .n{background:var(--accent);border-color:var(--accent);color:#0B0D10;font-weight:600}
+.steps .done{color:var(--ink2)}.steps .done .n{background:var(--card3);border-color:transparent;color:var(--ink)}
+h1{font-size:30px;letter-spacing:-.02em;margin:0 0 6px}.sub{color:var(--ink2);margin:0 0 22px}
+h2{font-size:15px;margin:0}
+label{display:block;font-size:13px;color:var(--ink2);margin:14px 0 6px}
+input,select{width:100%;font:inherit;height:44px;padding:0 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);color:var(--ink)}
+input:focus,select:focus{outline:2px solid rgba(255,107,44,.6);outline-offset:0;border-color:transparent}
+input::placeholder{color:#5E656F}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.camgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.or{margin:18px 0 0;color:var(--muted);font-size:13px}
+.note{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 18px;border-radius:10px;
+  background:rgba(141,184,255,.08);border:1px solid rgba(141,184,255,.25);color:var(--ink2);font-size:14px}
+.note svg{color:var(--blue);margin-top:2px}.note b{color:var(--ink)}
+.hints{margin:14px 0 0;padding:0;list-style:none;font-size:13px;color:var(--muted)}
+.hints li{display:flex;gap:8px;margin-top:6px}.hints li::before{content:"•";color:var(--line2)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+button.b{font:inherit;font-weight:600;height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--line2);background:transparent;
+  color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+button.b:hover{background:rgba(255,255,255,.05)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0B0D10}button.primary:hover{background:var(--accent);filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:default}
+.msg{font-size:14px;margin-top:12px}.msg.bad{color:var(--bad)}.msg.good{color:var(--ok)}
+.preview{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px solid var(--line);background-color:#07080A;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:40px 40px;display:grid;place-items:center;color:var(--muted);font-size:14px;text-align:center}
+.preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.det{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.det:last-of-type{border:0}.det .txt{flex:1}.det small{display:block;color:var(--muted);font-size:13px}
+.det .ic{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:var(--card2);color:var(--ink2)}
+.det .ic.fire{background:rgba(255,107,44,.14);color:var(--accent)}
+.det.soon{opacity:.55}.det.soon .lock{color:var(--muted)}
+.soonhead{margin:22px 0 4px;font:600 12px var(--mono);letter-spacing:.14em;color:var(--muted)}
+.sw{position:relative;width:52px;height:30px;flex:none;margin:0}.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:#2A3140;border-radius:15px;transition:.15s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:24px;height:24px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.sw input:checked+span{background:var(--accent)}.sw input:checked+span:before{transform:translateX(22px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.qr{display:flex;gap:22px;align-items:center;flex-wrap:wrap}.qr img{width:190px;height:190px;background:#fff;border-radius:12px;padding:8px}
+.qr a{color:var(--accent-ink);word-break:break-all}
+.linked{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.linked li{display:flex;align-items:center;gap:8px;color:var(--ok);font-size:14px}
+.linked button{background:none;border:1px solid var(--line2);color:inherit;opacity:.7;border-radius:8px;min-width:32px;min-height:32px;cursor:pointer;font-size:16px;line-height:1}
+.linked button:hover{opacity:1;color:var(--bad)}
+
+/* live */
+.banner{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:14px;background:var(--accent);color:#0B0D10;margin-bottom:18px;
+  animation:bpulse 2s ease-in-out infinite;transition:opacity .4s,filter .4s}
+.banner.amber{background:var(--amber);animation-name:bpulseA}
+@keyframes bpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,44,.5),0 10px 40px -12px rgba(255,107,44,.6)}50%{box-shadow:0 0 0 9px rgba(255,107,44,0),0 10px 56px -8px rgba(255,107,44,.85)}}
+@keyframes bpulseA{0%,100%{box-shadow:0 0 0 0 rgba(255,176,46,.5)}50%{box-shadow:0 0 0 9px rgba(255,176,46,0)}}
+.banner.ack{animation:none;opacity:.6;filter:saturate(.5)}
+.banner .bic{display:grid;place-items:center;width:46px;height:46px;border-radius:12px;background:rgba(11,13,16,.14);flex:none}
+.banner .bic svg{width:24px;height:24px}
+.banner .btxt{flex:1;min-width:0}.banner .bt{font-weight:700;font-size:18px;letter-spacing:-.01em}
+.banner .bs{font-size:14px;opacity:.8;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.banner .bb{display:flex;gap:10px;flex:none}
+.banner button{height:48px;padding:0 18px;border-radius:11px;font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.banner .dark{background:#0B0D10;color:#ECEEF1;border:0}.banner .ghost{background:transparent;color:#0B0D10;border:2px solid rgba(11,13,16,.35)}
+
+.live{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:20px}
+.video{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;border:1px solid var(--line);
+  box-shadow:0 20px 60px -24px rgba(0,0,0,.9)}
+.video.bad{border-color:transparent;box-shadow:inset 0 0 0 2px rgba(242,107,107,.7)}
+.video img{width:100%;height:100%;object-fit:contain;display:block}
+.ov{position:absolute;display:flex;gap:8px}.ov.tl{top:14px;left:14px}.ov.tr{top:14px;right:14px}
+.badge{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:7px;background:rgba(11,13,16,.7);
+  backdrop-filter:blur(4px);font-size:12px;color:var(--ink2)}
+.badge.live{font-weight:700;letter-spacing:.1em;color:var(--ink)}.badge.live .dot{color:var(--ok)}
+.badge.off{color:var(--bad);font-weight:700;letter-spacing:.1em}
+.ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;background:rgba(11,13,16,.88);padding:20px}
+.ph .big{font-size:22px;font-weight:600;margin:10px 0 4px}.ph .small{color:var(--ink2);font-size:14px;display:flex;align-items:center;gap:8px;justify-content:center}
+.ph .circ{display:grid;place-items:center;width:56px;height:56px;margin:0 auto;border-radius:50%;background:rgba(255,255,255,.06)}
+.ph.bad .circ{background:rgba(242,107,107,.14);color:var(--bad)}.ph.bad .big{color:#F79B9B}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;margin:16px 0 10px}
+.rowhead h2{font-size:14px;color:var(--ink2);font-weight:600}
+.upd{display:inline-flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--muted)}
+.upd .dot{width:6px;height:6px;color:var(--ok);background:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px;min-width:0}
+.stat .l{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
+.stat .v{font:500 22px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.stat .v small{font-size:13px;color:var(--muted);margin-left:3px}.stat .v.txt{font-size:15px;padding-top:5px}
+.tr{font-family:var(--mono)}.tr.good{color:var(--ok)}.tr.worse{color:var(--amber)}
+.watch{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;font-size:14px}
+.chipw{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--card2);font-weight:500}
+.chipw svg{width:15px;height:15px}.chipw.fire svg{color:var(--accent)}
+
+.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.counters div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.counters span{font-size:12px;color:var(--muted)}.counters b{display:block;font:500 28px var(--mono);font-variant-numeric:tabular-nums}
+.counters .al b{color:var(--accent)}
+.events{position:relative;display:flex;flex-direction:column;gap:12px}
+.events.rail::before{content:"";position:absolute;left:7px;top:18px;bottom:18px;width:2px;border-radius:2px;background:var(--line2)}
+.ev{position:relative;margin-left:26px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
+  transition:transform .18s,box-shadow .18s,border-color .18s}
+.ev:hover{transform:translateY(-3px);box-shadow:0 14px 34px -12px rgba(0,0,0,.85);border-color:var(--line2)}
+.ev .rd{position:absolute;left:-25px;top:16px;width:12px;height:12px;border-radius:50%;background:var(--grey);box-shadow:0 0 0 4px #0F1318}
+.ev.checking .rd,.ev.watching .rd{background:var(--blue)}.ev.confirmed .rd{background:var(--accent)}.ev.possible .rd,.ev.unverified .rd{background:var(--amber)}
+.ev .top{display:flex;gap:12px}
+.ev .thumb{width:108px;height:61px;border-radius:8px;object-fit:cover;background:#07080A;flex:none;cursor:zoom-in;border:1px solid var(--line)}
+.ev .hd{min-width:0;flex:1}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-right:6px}
+.tag.checking,.tag.watching{background:rgba(141,184,255,.14);color:var(--blue);animation:blink 1.4s ease-in-out infinite}
+.tag.confirmed{background:rgba(255,107,44,.15);color:var(--accent-ink)}
+.tag.possible,.tag.unverified{background:rgba(255,176,46,.14);color:var(--amber)}
+.tag.dismissed,.tag.cleared{background:rgba(163,169,179,.1);color:var(--ink2)}
+@keyframes blink{50%{opacity:.45}}
+.ev .meta{font:12px var(--mono);color:var(--muted)}.ev .note{font-size:13px;color:var(--ink2);margin-top:4px}
+.reason{margin-top:10px;padding:9px 12px;border-radius:9px;background:rgba(255,255,255,.03)}
+.reason .rl{display:flex;align-items:center;gap:5px;font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:3px}
+.reason .rl svg{width:12px;height:12px;color:var(--accent)}
+.reason p{margin:0;font-size:15px;line-height:1.4;color:var(--ink)}
+.ev .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ev .acts button{font:inherit;font-size:12px;font-weight:500;height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line2);
+  background:transparent;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.ev .acts button:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+.ev .acts button.on{background:var(--ink);color:#0B0D10;border-color:var(--ink)}
+.ev .acts svg{width:14px;height:14px}
+.ev video{width:100%;border-radius:8px;margin-top:10px;display:block}
+.empty{text-align:center;padding:34px 20px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+.empty .circ{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 12px;border-radius:50%;background:rgba(61,214,140,.1);color:var(--ok)}
+.empty b{display:block;font-size:17px}.empty span{color:var(--ink2)}
+
+#toasts{position:fixed;top:76px;left:0;right:0;z-index:20;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 16px}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:12px;background:#1C2128;border:1px solid var(--line2);
+  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);font-size:14px;font-weight:500;animation:tin .22s ease-out;transition:opacity .3s}
+.toast svg{color:var(--ok)}.toast.out{opacity:0}
+@keyframes tin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdrop{background:rgba(0,0,0,.85)}
+#zoom img{max-width:95vw;max-height:90vh;border-radius:10px;display:block}
+.clipbox{width:min(960px,calc(100vw - 32px));background:var(--card);border:1px solid var(--line2);border-radius:14px;overflow:hidden}
+.cliphead{display:flex;align-items:center;gap:12px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line)}
+.cliphead .t{flex:1}.cliphead span{display:block;font:12px var(--mono);color:var(--muted)}
+.cliphead button{width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:var(--ink);cursor:pointer;display:grid;place-items:center}
+.cliphead button:hover{background:rgba(255,255,255,.06)}
+.clipbox video{width:100%;display:block;background:#000;max-height:75vh}
+
+.ev .strip{width:100%;border-radius:8px;margin-top:10px;display:block;cursor:zoom-in;border:1px solid var(--line);background:#07080A}
+.ev .stl{font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:10px}
+.tline{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;font:12px var(--mono);color:var(--ink2)}
+.tline b{color:var(--ink);font-weight:500}.tline .ar{color:var(--muted)}.tline .hot{color:var(--accent-ink)}
+.timing{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.timing div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.timing span{font-size:12px;color:var(--muted)}.timing b{display:block;font:500 22px var(--mono)}.timing .al b{color:var(--accent)}
+.vidlist{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.vid{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line2);border-radius:11px;cursor:pointer}
+.vid:hover{background:rgba(255,255,255,.03)}.vid.on{border-color:var(--accent);background:rgba(255,107,44,.06)}
+.vid input{width:18px;height:18px;margin-top:3px;flex:none;accent-color:var(--accent)}.vid b{display:block}
+.vid small{display:block;color:var(--muted);font-size:13px}.vid.off{opacity:.5;cursor:default}
+@media (max-width:1000px){.live{grid-template-columns:1fr}}
+@media (max-width:820px){.camgrid{grid-template-columns:1fr}.camhdr,.vsep{display:none}}
+@media (max-width:640px){
+  main{padding:14px 16px}header{padding:0 12px;gap:10px}.brand b,nav .t{display:none}
+  .grid2{grid-template-columns:1fr}h1{font-size:24px}.card{padding:18px}
+  .stats{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none}
+  .stats::-webkit-scrollbar{display:none}.stat{min-width:140px;scroll-snap-align:start}
+  .banner{flex-wrap:wrap}.banner .bb{width:100%}.banner button{flex:1;height:56px}
+  .btns button.b{flex:1;height:56px}.ov.tl .dim{display:none}.pill .long{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="i-smoke" viewBox="0 0 24 24"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 3 14 9-14 9V3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/></symbol>
+  <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M12 20h.01M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2-1.5M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8A15 15 0 0 0 11 5.1M2 2l20 20"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.7 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M16.8 5.1 5.6 11a1 1 0 0 0-.4 1.4l1.5 2.6a1 1 0 0 0 1.4.4L19.4 9.5"/><path d="M3 21h4l2.7-3.7"/><path d="M3 17v4"/><path d="m21 4-4.2-2.4a1 1 0 0 0-1.4.4L14 4.5"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.2a1 1 0 0 1-1.2 1L5 20V5.6a2 2 0 0 1 1.5-2l4-1A2 2 0 0 1 13 4.6z"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="i-camoff" viewBox="0 0 24 24"><path d="M2 2l20 20M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.1 14.1A3 3 0 1 1 9.9 9.9"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+</defs></svg>
+
+<header>
+  <a class=brand href="#live"><span class=logo><svg class=i><use href="#i-bag"/></svg></span><b>Theft Watch</b></a>
+  <span class=vsep></span>
+  <div class=camhdr><b id=hdrcam></b><span id=hdrsrc></span></div>
+  <span id=hdrstate class=pill><span class=dot></span></span>
+  <span id=hdrdemo class="pill demo" title="A recording played as if it were a live camera" hidden><span>Demo<span class=long> recording</span></span></span>
+  <span class=sp></span>
+  <nav>
+    <a href="#live" data-nav=live aria-label=Live><svg class=i><use href="#i-live"/></svg><span class=t>Live</span></a>
+    <a href="#camera" data-nav=setup aria-label=Settings><svg class=i><use href="#i-gear"/></svg><span class=t>Settings</span></a>
+    <button class=link id=logout aria-label="Log out"><svg class=i><use href="#i-out"/></svg><span class=t>Log out</span></button>
+  </nav>
+</header>
+<main id=app></main>
+<div id=toasts></div>
+<dialog id=zoom><img alt=""></dialog>
+<dialog id=clipdlg><div class=clipbox>
+  <div class=cliphead><div class=t><b>Evidence clip</b><span id=clipmeta></span></div>
+    <button id=clipclose aria-label=Close><svg class=i><use href="#i-x"/></svg></button></div>
+  <video id=clipvid controls playsinline muted></video></div></dialog>
+
+<template id=t-camera><div class=wiz>
+  <ol class=steps><li class=on><a href="#camera"><span class=n>1</span>Camera</a></li><li class=><a href="#detections"><span class=n>2</span>Detections</a></li><li class=><a href="#alerts"><span class=n>3</span>Alerts (Telegram)</a></li></ol>
+  <h1>Choose the camera</h1><p class=sub>For this demo, a store recording is played as if it were a live camera.</p>
+  <div class=camgrid>
+    <div class=card>
+      <div class=note><svg class=i><use href="#i-cam"/></svg><div><b>Demo recordings.</b> Real shop CCTV from YouTube, played at camera
+        speed. Person detection (YOLO) was run beforehand, as a GPU would do live; the trigger, the AI check and the alerts run now.</div></div>
+      <label style="margin-top:0">Recording</label>
+      <div class=vidlist id=c-vids></div>
+      <div class=btns><button class="b primary" id=c-save>Save and continue</button></div>
+      <div class=msg id=c-msg></div>
+    </div>
+    <div class=card style="opacity:.6">
+      <h2 style="display:flex;align-items:center;gap:8px"><svg class=i><use href="#i-lock"/></svg>Live cameras: next step</h2>
+      <p class=muted style="margin:10px 0 0;font-size:14px">Hikvision, Dahua or any RTSP stream, the same as the fire demo.
+        Needs a GPU for person detection at camera speed.</p>
+      <label>IP address</label><input class=mono placeholder="192.168.1.64" disabled>
+      <label>Stream URL</label><input class=mono placeholder="rtsp://user:pass@192.168.1.64:554/..." disabled>
+    </div>
+  </div>
+</div></template>
+
+<template id=t-detections><div class=wiz>
+  <ol class=steps><li class=done><a href="#camera"><span class=n>✓</span>Camera</a></li><li class=on><a href="#detections"><span class=n>2</span>Detections</a></li><li class=><a href="#alerts"><span class=n>3</span>Alerts (Telegram)</a></li></ol>
+  <h1>What should this camera watch for?</h1><p class=sub>Sensitivity and timing are tuned for your store.</p>
+  <div class=card>
+    <div class=det><span class="ic fire"><svg class=i><use href="#i-bag"/></svg></span><div class=txt><b>Theft / concealment</b>
+      <small>Goods put into a pocket, bag or under clothing. Gestures only, no face recognition.</small></div>
+      <label class=sw><input type=checkbox checked disabled aria-label="Theft detection (on)"><span></span></label></div>
+    <div class=soonhead>COMING SOON</div>
+    <div class="det soon"><span class=ic><svg class=i><use href="#i-flame"/></svg></span><div class=txt>Fire / smoke</div><svg class="i lock"><use href="#i-lock"/></svg></div>
+    <div class="det soon"><span class=ic><svg class=i><use href="#i-door"/></svg></span><div class=txt>Intrusion after hours</div><svg class="i lock"><use href="#i-lock"/></svg></div>
+    <div class="det soon"><span class=ic><svg class=i><use href="#i-people"/></svg></span><div class=txt>Loitering</div><svg class="i lock"><use href="#i-lock"/></svg></div>
+    <div class="det soon"><span class=ic><svg class=i><use href="#i-camoff"/></svg></span><div class=txt>Camera tampering</div><svg class="i lock"><use href="#i-lock"/></svg></div>
+  </div>
+  <div class=btns><button class="b primary" id=d-next>Continue</button></div>
+</div></template>
+
+<template id=t-alerts><div class=wiz>
+  <ol class=steps><li class=done><a href="#camera"><span class=n>✓</span>Camera</a></li><li class=done><a href="#detections"><span class=n>✓</span>Detections</a></li><li class=on><a href="#alerts"><span class=n>3</span>Alerts (Telegram)</a></li></ol>
+  <h1>Get alerts on Telegram</h1><p class=sub>Scan the code with your phone, open the bot in Telegram and press <b>Start</b>. To stop alerts, press × here or send <b>/stop</b> to the bot.</p>
+  <div class=card>
+    <div class=qr><img id=a-qr alt="Telegram QR code"><div><a id=a-link target=_blank></a><div id=a-linked class=msg></div></div></div>
+    <div class=btns><button class=b id=a-test>Send test alert</button><button class="b primary" id=a-done>Finish</button></div>
+    <div class=msg id=a-msg></div>
+  </div>
+</div></template>
+
+<template id=t-live><div>
+  <div id=l-banner></div>
+  <div class=live>
+    <section style="min-width:0">
+      <div class=video id=l-video><img id=l-img alt="live view">
+        <div class=ph id=l-ph><div><div class=circ id=l-phic><span class=spin></span></div><div class=big id=l-phbig>Connecting…</div>
+          <div class=small id=l-phsmall></div></div></div>
+        <div class="ov tl"><span class="badge live" id=l-badge></span><span class="badge dim" id=l-cam></span></div>
+        <div class="ov tr"><span class="badge mono" id=l-clock></span></div>
+      </div>
+      <div class=rowhead><h2>System</h2><span class=upd><span class="dot pulse"></span><span id=l-upd>Updated just now</span></span></div>
+      <div class=stats id=l-stats></div>
+      <div class=rowhead><h2>Timing (median, from the act)</h2><span class=upd>act = the person's last suspicious movement</span></div>
+      <div class=timing><div><span>Check starts · silent note</span><b id=tm-check>—</b></div><div><span>AI answer</span><b id=tm-ai>—</b></div>
+        <div class=al><span>Alert on the phone</span><b id=tm-alert>—</b></div></div>
+      <div class=watch id=l-watch></div>
+    </section>
+    <aside style="min-width:0">
+      <div class=counters><div><span>AI checks</span><b id=n-events>0</b></div><div class=al><span>Alerts</span><b id=n-alerts>0</b></div>
+        <div><span>All clear</span><b id=n-dismissed>0</b></div></div>
+      <div class=rowhead><h2>Activity</h2><span class="upd">newest first</span></div>
+      <div class=events id=l-events></div>
+    </aside>
+  </div>
+</div></template>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (url, body) => {
+  const r = await fetch(url, body === undefined ? {} : {method:"POST", headers:{"Content-Type":"application/json"}, body:JSON.stringify(body)});
+  if (r.status === 401){ location.reload(); throw new Error("login"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const icon = (name, cls = "i") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
+let S = null, screen = null, timer = null, lastOk = 0, prev = {};
+
+function toast(text){
+  const t = document.createElement("div");
+  t.className = "toast"; t.setAttribute("role", "status");
+  t.innerHTML = icon("check") + `<span>${esc(text)}</span>`;
+  $("#toasts").appendChild(t);
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, 2400);
+}
+
+const STATE = {checking:["Checking…","AI is looking at the 5 frames"], confirmed:["Theft confirmed",""], possible:["Possible theft",""],
+               dismissed:["All clear","AI: normal shopping, no alert"]};
+const CAMSTATE = {ok:["ok","Monitoring"], connecting:["wait","Starting…"], finishing:["wait","Video ended · AI answering"],
+                  not_configured:["", "No recording"], ended:["", "Video ended"], stopped:["", "Stopped"],
+                  ready:["", "Recording ready"]};
+const ALERTS = new Set(["confirmed","possible"]);
+const evTime = e => (e.wall_time || "").slice(11) || `t=${e.t.toFixed(0)}s`;
+const mmss = s => `${String(Math.floor(s / 60)).padStart(2, "0")}:${(s % 60).toFixed(1).padStart(4, "0")}`;
+const secs = v => v === null || v === undefined ? "—" : `${Number(v).toFixed(v < 10 ? 1 : 0)} s`;
+
+async function refresh(){
+  try { S = await api("/api/state"); lastOk = Date.now(); } catch(e){ return; }
+  const st = S.status, [cls, txt] = CAMSTATE[st.state] || ["", st.state];
+  $("#hdrstate").className = "pill " + cls;
+  $("#hdrstate").innerHTML = `<span class="dot ${cls === "ok" ? "pulse" : ""}"></span>${txt}`;
+  $("#hdrcam").textContent = st.camera || "";
+  $("#hdrsrc").textContent = st.video ? `recording · ${st.video}` : "";
+  $("#hdrdemo").hidden = !st.video;
+  if (screen === "live") drawLive();
+  if (screen === "alerts") drawLinked();
+}
+
+function show(name){
+  screen = name;
+  const app = $("#app");
+  app.innerHTML = ""; app.appendChild($("#t-" + name).content.cloneNode(true));
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", (a.dataset.nav === "live") === (name === "live")));
+  ({camera:initCamera, detections:initDetections, alerts:initAlerts, live:initLive})[name]();
+}
+
+function route(){
+  const h = location.hash.slice(1);
+  if (["camera","detections","alerts","live"].includes(h)) return show(h);
+  location.hash = S && S.status.setup_done ? "live" : "camera";
+}
+
+// --- 1. camera = demo recording ---
+function initCamera(){
+  const msg = (t, ok) => { $("#c-msg").textContent = t; $("#c-msg").className = "msg " + (ok ? "good" : "bad"); };
+  let chosen = S.status.video || "";
+  api("/api/videos").then(vids => {
+    const ok = v => v.video && v.tracks;
+    if (!chosen) chosen = (vids.find(ok) || {}).id || "";
+    $("#c-vids").innerHTML = vids.map(v => `<label class="vid ${ok(v) ? "" : "off"} ${v.id === chosen ? "on" : ""}">
+      <input type=radio name=vid value="${esc(v.id)}" ${v.id === chosen ? "checked" : ""} ${ok(v) ? "" : "disabled"}>
+      <span><b>${esc(v.title)} <span class="mono muted" style="font-weight:400">${esc(v.id)}</span></b>
+      <small>${esc(v.notes)}</small>${ok(v) ? "" : `<small style="color:var(--amber)">${v.video ? "YOLO not precomputed yet" : "not downloaded yet"}</small>`}</span></label>`).join("");
+    $("#c-vids").onchange = ev => { chosen = ev.target.value;
+      document.querySelectorAll(".vid").forEach(l => l.classList.toggle("on", l.querySelector("input").value === chosen)); };
+  }).catch(e => msg(e.message, false));
+  $("#c-save").onclick = async () => {
+    if (!chosen) return msg("Choose a recording", false);
+    try { await api("/api/camera", {video: chosen}); await refresh(); location.hash = S.status.setup_done ? "live" : "detections"; }
+    catch(e){ msg(e.message, false); }
+  };
+}
+
+// --- 2. detections ---
+function initDetections(){
+  $("#d-next").onclick = () => location.hash = S.status.setup_done ? "live" : "alerts";
+}
+
+// --- 3. alerts ---
+function drawLinked(){
+  const t = S.telegram, el = $("#a-linked");
+  if (!el) return;
+  if (!t.enabled){ el.textContent = "Telegram bot is not configured on the server (TELEGRAM_BOT_TOKEN)."; el.className = "msg bad"; return; }
+  const sig = JSON.stringify(t.chats);
+  if (el.dataset.sig === sig) return;       // redrawn every 2 s: don't swap the × under the user's finger
+  el.dataset.sig = sig;
+  el.className = "msg " + (t.chats.length ? "good" : "");
+  el.innerHTML = t.chats.length
+    ? `<ul class=linked>${t.chats.map(c => `<li>✓ Linked as ${esc(c.name)}<button data-unlink="${esc(c.id)}" data-name="${esc(c.name)}" title="Unlink ${esc(c.name)}" aria-label="Unlink ${esc(c.name)}">×</button></li>`).join("")}</ul>`
+    : "Waiting for Start…";
+}
+function initAlerts(){
+  const t = S.telegram;
+  if (t.enabled && t.link){ $("#a-qr").src = "/api/telegram/qr.png"; $("#a-link").href = t.link; $("#a-link").textContent = t.link; }
+  else $("#a-qr").hidden = true;
+  drawLinked();
+  $("#a-linked").onclick = async ev => {
+    const b = ev.target.closest("[data-unlink]");
+    if (!b) return;
+    const name = b.dataset.name;
+    if (!confirm(`Unlink ${name}? They will stop getting theft alerts.`)) return;
+    b.disabled = true;
+    try { await api("/api/telegram/unlink", {id: Number(b.dataset.unlink)}); await refresh(); toast(`Unlinked ${name}`); }
+    catch(e){ b.disabled = false; msg(e.message, false); }
+  };
+  const msg = (x, ok) => { $("#a-msg").textContent = x; $("#a-msg").className = "msg " + (ok ? "good" : "bad"); };
+  $("#a-test").onclick = async () => { try { await api("/api/telegram/test", {}); msg("Test alert sent. Check your phone.", true); }
+                                       catch(e){ msg(e.message, false); } };
+  $("#a-done").onclick = async () => { await api("/api/setup_done", {}); await refresh(); location.hash = "live"; };
+}
+
+// --- 4. live + events ---
+let imgOk = false;
+function initLive(){
+  const img = $("#l-img");
+  imgOk = false;
+  img.onload = () => { imgOk = true; drawVideoState(); };
+  img.onerror = () => { imgOk = false; drawVideoState(); setTimeout(() => img.src = "/live.mjpg?" + Date.now(), 3000); };
+  img.src = "/live.mjpg";
+  drawLive();
+}
+function drawVideoState(){
+  if (!$("#l-video") || !S) return;
+  const st = S.status;
+  $("#l-video").classList.remove("bad");
+  $("#l-badge").className = "badge " + (st.state === "ok" ? "live" : "");
+  $("#l-badge").innerHTML = st.state === "ok" ? `<span class="dot pulse"></span>LIVE` : esc((CAMSTATE[st.state] || ["", st.state])[1]);
+  $("#l-cam").textContent = st.state === "ok" && st.duration_s ? `${st.video} · ${mmss(st.t)} / ${mmss(st.duration_s)}` : (st.video || "");
+  $("#l-cam").hidden = !st.video;
+  const ph = $("#l-ph");
+  ph.hidden = st.state === "ok" && imgOk;
+  ph.classList.remove("bad");
+  if (st.state === "not_configured"){
+    $("#l-phic").innerHTML = icon("cam"); $("#l-phbig").textContent = "No recording chosen";
+    $("#l-phsmall").innerHTML = `<a href="#camera" style="color:var(--accent-ink)">Open Settings to choose one</a>`;
+  } else if (["ended", "stopped", "ready", "finishing"].includes(st.state)){
+    // a recording plays only on this button (never by itself after a restart)
+    $("#l-phic").innerHTML = st.state === "finishing" ? `<span class=spin></span>` : icon("cam");
+    $("#l-phbig").textContent = CAMSTATE[st.state][1];
+    const label = st.state === "ready" ? "Play video" : "Replay from the start";
+    if (!$("#playbtn") || $("#playbtn").dataset.label !== label)
+      $("#l-phsmall").innerHTML = `<button class="b primary" id=playbtn data-label="${label}">${icon("play")}${label}</button>`;
+  } else {
+    $("#l-phic").innerHTML = `<span class=spin></span>`; $("#l-phbig").textContent = "Starting…"; $("#l-phsmall").textContent = "";
+  }
+}
+
+function trend(key, v, goodUp){
+  const p = prev[key]; prev[key] = v;
+  if (p === undefined || v === p || !v) return "";
+  const up = v > p, good = up === goodUp;
+  return `<span class="tr ${good ? "good" : "worse"}">${up ? "↑" : "↓"} ${Math.abs(v - p).toFixed(1)}</span>`;
+}
+function drawStats(){
+  const st = S.status, live = st.state === "ok";
+  const fps = live && st.fps ? Number(st.fps) : 0;
+  const ai = st.qwen === "off" ? "off" : String(st.qwen).split("/").pop();
+  const tiles = [
+    ["Video", fps ? fps.toFixed(0) : "—", "fps", ""],
+    ["Person detection", st.yolo_ms ? Number(st.yolo_ms).toFixed(0) : "—", "ms", `<span class=tr title="YOLO pose was run beforehand; on this laptop's CPU it takes this long per frame">precomputed</span>`],
+    ["Frames checked", Number(st.checks).toLocaleString("en-US"), "", ""],
+    ["AI check", ai, "", st.qwen_calls ? `<span class=tr>${st.qwen_calls} calls</span>` : "", true],
+    ["AI cost", st.qwen_calls ? "$" + Number(st.qwen_cost_usd).toFixed(3) : "—", "", ""],
+  ];
+  $("#l-stats").innerHTML = tiles.map(([l, v, u, tr, txt]) =>
+    `<div class=stat><div class=l><span>${l}</span>${tr}</div><div class="v ${txt ? "txt" : ""}" title="${esc(v)}">${esc(v)}${u ? `<small>${u}</small>` : ""}</div></div>`).join("");
+  const tm = st.timing || {};
+  $("#tm-check").textContent = secs(tm.act_to_check_s); $("#tm-ai").textContent = secs(tm.qwen_s);
+  $("#tm-alert").textContent = secs(tm.act_to_alert_s);
+  $("#l-watch").innerHTML = `<span class=muted>Watching</span><span class="chipw fire">${icon("bag")}Theft / concealment</span>` +
+    (st.counters.skipped ? `<span class=muted>· ${st.counters.skipped} repeat movements not re-checked</span>` : "");
+}
+
+function drawBanner(){
+  const el = $("#l-banner");
+  const e = S.events.find(x => ALERTS.has(x.state) && x.sent.some(k => k === "alert" || k === "upgrade"))
+         || S.events.find(x => ALERTS.has(x.state));
+  const chats = S.telegram.chats.length;
+  const sig = e ? JSON.stringify([e.n, e.state, e.reason, (e.files || {}).clip, e.sent, e.timing, chats]) : "";
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  if (!e){ el.innerHTML = ""; return; }
+  const conf = e.state === "confirmed", clip = (e.files || {}).clip, tm = e.timing || {};
+  const alerted = e.sent.some(k => k === "alert" || k === "upgrade");
+  const head = conf ? "THEFT CONFIRMED" : e.verdict === "UNCERTAIN" ? "POSSIBLE THEFT" : "POSSIBLE THEFT (NOT VERIFIED)";
+  const sent = !alerted ? "Same incident: already alerted"
+             : !chats ? (S.telegram.enabled ? "Not sent: no one linked to Telegram" : "Not sent: Telegram not set up")
+             : `Alert sent to ${chats} ${chats === 1 ? "person" : "people"}${tm.act_to_alert_s ? ` ${secs(tm.act_to_alert_s)} after the act` : ""}`;
+  el.innerHTML = `<div class="banner ${conf ? "" : "amber"}" role="alert">
+    <span class=bic>${icon("alert")}</span>
+    <div class=btxt><div class=bt>🚨 ${head} <span style="opacity:.5">•</span> ${esc(sent)} <span style="opacity:.5">•</span> <span class=mono>${esc(evTime(e))}</span></div>
+      <div class=bs>${esc(e.reason ? `“${e.reason}”` : S.status.camera || "")}</div></div>
+    <div class=bb>
+      <button class=dark data-bclip=${e.n} ${clip ? "" : "disabled"}>${icon("play")}${clip ? "View clip" : "Clip…"}</button>
+    </div></div>`;
+}
+
+const openEv = new Set();
+function drawLive(){
+  if (!$("#l-events")) return;
+  const st = S.status;
+  drawVideoState(); drawStats(); drawBanner();
+  $("#n-events").textContent = st.counters.checks; $("#n-alerts").textContent = st.counters.alerts;
+  $("#n-dismissed").textContent = st.counters.dismissed;
+  const box = $("#l-events");
+  const sig = JSON.stringify([S.events, [...openEv]]);
+  if (box.dataset.sig === sig) return;          // unchanged: don't restart an open clip
+  box.dataset.sig = sig;
+  box.classList.toggle("rail", S.events.length > 1);
+  if (!S.events.length){
+    box.innerHTML = `<div class=empty><div class=circ>${icon("shield")}</div><b>No suspicious movement yet.</b><span>System monitoring normally.</span></div>`;
+    return;
+  }
+  box.innerHTML = S.events.map(e => {
+    let [title, note] = STATE[e.state] || [e.state, ""];
+    if (e.state === "possible") note = e.verdict === "UNCERTAIN" ? "AI not sure" : "not verified (AI timeout / error)";
+    const tg = e.sent.length ? "Telegram: " + e.sent.map(k => ({early:"silent note", alert:"alert", upgrade:"upgrade", clear:"all clear"})[k] || k).join(", ")
+             : "dashboard only (same incident)";
+    note = [note, tg].filter(Boolean).join(" · ");
+    const f = e.files || {}, tm = e.timing || {};
+    const steps = [`act <b>${mmss(e.last_cue_t)}</b>`, `check <b>+${secs(tm.act_to_check_s)}</b>`];
+    if (tm.qwen_s !== undefined) steps.push(`AI <b>${secs(tm.queue_s + tm.qwen_s)}</b>`);
+    if (tm.act_to_alert_s !== undefined) steps.push(`<span class=hot>alert <b>+${secs(tm.act_to_alert_s)}</b></span>`);
+    return `<article class="ev ${e.state}"><span class=rd></span>
+      <div class=top>
+        ${f.snapshot ? `<img class=thumb src="/files/${esc(f.snapshot)}" alt="snapshot" data-zoom>` : `<div class=thumb></div>`}
+        <div class=hd><span class="tag ${e.state}">${esc(title)}</span><span class=meta>person #${e.tid} · incident ${e.incident} · ${esc(evTime(e))}</span>
+          <div class=note>${esc(note)}</div></div>
+      </div>
+      <div class=tline>${steps.join(` <span class=ar>→</span> `)}</div>
+      ${f.qwen ? `<div class=stl>What the AI saw (5 frames)</div><img class=strip src="/files/${esc(f.qwen)}" alt="frames sent to the AI" data-zoom>` : ""}
+      ${e.reason ? `<div class=reason><div class=rl>${icon("sparkles")}AI reasoning</div><p>“${esc(e.reason)}”</p></div>` : ""}
+      ${f.clip || e.state !== "checking" ? `<div class=acts>
+        ${f.clip ? `<button data-clip=${e.n}>${icon("play")}${openEv.has(e.n) ? "Hide clip" : "Clip"}</button>` : ""}
+        ${e.state !== "checking" ? `<button data-fb=real data-n=${e.n} class="${e.feedback === "real" ? "on" : ""}">${icon("up")}Real</button>
+        <button data-fb=false data-n=${e.n} class="${e.feedback === "false" ? "on" : ""}">${icon("down")}False alarm</button>` : ""}
+      </div>` : ""}
+      ${f.clip && openEv.has(e.n) ? `<video src="/files/${esc(f.clip)}" controls autoplay muted playsinline></video>` : ""}
+    </article>`;
+  }).join("");
+}
+
+function tick(){
+  const c = $("#l-clock"); if (c) c.textContent = new Date().toLocaleTimeString("en-GB");
+  const u = $("#l-upd");
+  if (u && lastOk){ const s = Math.floor((Date.now() - lastOk) / 1000); u.textContent = s < 1 ? "Updated just now" : `Updated ${s}s ago`; }
+}
+
+document.addEventListener("click", async ev => {
+  const t = ev.target.closest("button, img[data-zoom], dialog") || ev.target;
+  if (t.id === "playbtn"){
+    t.disabled = true;
+    try { await api("/api/play", {}); await refresh(); toast("Playing the recording from the start"); }
+    catch(err){ t.disabled = false; toast("Could not play: " + err.message); }
+  }
+  if (t.dataset.clip){ const n = +t.dataset.clip; openEv.has(n) ? openEv.delete(n) : openEv.add(n); drawLive(); }
+  if (t.dataset.fb){ const e = S.events.find(x => x.n === +t.dataset.n), v = e.feedback === t.dataset.fb ? "" : t.dataset.fb;
+    await api(`/api/events/${t.dataset.n}/feedback`, {value: v}); await refresh();
+    if (v) toast(v === "real" ? "Marked as real" : "Marked as false alarm"); }
+  if (t.dataset.bclip){ const e = S.events.find(x => x.n === +t.dataset.bclip);
+    if (e && e.files.clip){ $("#clipvid").src = "/files/" + e.files.clip; $("#clipmeta").textContent = `${S.status.camera || ""} · ${evTime(e)}`;
+      $("#clipdlg").showModal(); $("#clipvid").play().catch(() => {}); } }
+  if (t.dataset.zoom !== undefined && t.src){ $("#zoom img").src = t.src; $("#zoom").showModal(); }
+  if (t.id === "zoom" || t.closest("#zoom")) $("#zoom").close();
+  if (t.id === "clipclose" || ev.target.id === "clipdlg") $("#clipdlg").close();   // close button or backdrop, not the video
+});
+$("#clipdlg").addEventListener("close", () => { $("#clipvid").pause(); $("#clipvid").removeAttribute("src"); $("#clipvid").load(); });
+$("#logout").onclick = async () => { await api("/api/logout", {}); location.reload(); };
+addEventListener("hashchange", route);
+(async () => { await refresh(); route(); timer = setInterval(refresh, 2000); setInterval(tick, 500); tick(); })();
+</script></body></html>

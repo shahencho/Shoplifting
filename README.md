@@ -53,6 +53,10 @@ Every video in `test_youtube/raw/` counts as theft for scoring, unless `test_you
 
 Long raw videos in `test_youtube/store_sim/` are run end to end as if from a store camera. The pipeline keeps going after each alarm, and every alarm is then reviewed as correct or false. See [docs/store_sim.md](docs/store_sim.md).
 
+## Theft demo (dashboard + Telegram)
+
+A frozen copy of this pipeline lives in [theft_demo/](theft_demo/README.md). It plays a store recording as if it were a live camera, with the same design as the fire demo: a silent "checking" note, then a Qwen-verified alert with clip and timing. It has its own venv, config and outputs, so tuning here doesn't change it.
+
 ## Layout
 
 | Path | Purpose |

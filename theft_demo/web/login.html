@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Theft Watch login</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{color-scheme:dark;--bg:#0B0D10;--card:#13161B;--ink:#ECEEF1;--ink2:#A3A9B3;--line:rgba(255,255,255,.12);--accent:#FF6B2C;--bad:#F26B6B}
+*{box-sizing:border-box}
+body{margin:0;min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(0,1fr);background:var(--bg);color:var(--ink);
+  font:16px/1.45 "Geist",system-ui,-apple-system,"Segoe UI",sans-serif}
+.side{position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;padding:48px 56px;border-right:1px solid rgba(255,255,255,.06);
+  background-color:#07080A;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);
+  background-size:56px 56px}
+.side::after{content:"";position:absolute;right:-160px;bottom:-160px;width:480px;height:480px;border-radius:50%;background:rgba(255,107,44,.18);filter:blur(110px);pointer-events:none}
+.brand{display:flex;align-items:center;gap:10px;font-weight:700;font-size:18px}
+.logo{display:grid;place-items:center;width:36px;height:36px;border-radius:10px;background:var(--accent);color:#0B0D10}
+svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.kick{font:500 12px "Geist Mono",ui-monospace,monospace;letter-spacing:.2em;color:var(--accent);margin:0 0 18px}
+h1{font-size:52px;line-height:1.05;letter-spacing:-.03em;margin:0;max-width:560px}
+.lead{font-size:18px;color:var(--ink2);margin:20px 0 0;max-width:460px}
+.feats{display:flex;gap:26px;font-size:14px;color:var(--ink2);position:relative;z-index:1}
+.feats span{display:flex;align-items:center;gap:8px}.feats i{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+.formside{display:grid;place-items:center;padding:24px}
+form{width:100%;max-width:360px}
+form .brand{display:none;margin-bottom:32px}
+h2{font-size:26px;letter-spacing:-.01em;margin:0 0 4px}.sub{margin:0 0 8px;color:var(--ink2);font-size:15px}
+label{display:block;font-size:13px;color:var(--ink2);margin:16px 0 6px}
+input{width:100%;font:inherit;height:48px;padding:0 14px;border:1px solid var(--line);border-radius:11px;background:var(--card);color:var(--ink)}
+input:focus{outline:2px solid rgba(255,107,44,.6);border-color:transparent}
+button{width:100%;margin-top:22px;height:52px;font:inherit;font-weight:700;border:0;border-radius:11px;background:var(--accent);color:#0B0D10;cursor:pointer}
+button:hover{filter:brightness(1.08)}
+#err{color:var(--bad);font-size:14px;min-height:20px;margin-top:12px}
+@media (max-width:900px){body{grid-template-columns:1fr}.side{display:none}form .brand{display:flex}button{height:56px}}
+</style></head><body>
+<section class=side>
+  <div class=brand><span class=logo><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg></span>Theft Watch</div>
+  <div><p class=kick>LOSS PREVENTION</p><h1>Catch shoplifting on the cameras you already have.</h1>
+    <p class=lead>Gestures only, no face recognition. Every suspicious movement is double-checked by AI before anyone's phone buzzes.</p></div>
+  <div class=feats><span><i></i>Hikvision · Dahua · RTSP</span><span><i></i>AI verification</span><span><i></i>Telegram alerts</span></div>
+</section>
+<div class=formside>
+<form id=f>
+  <div class=brand><span class=logo><svg viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></svg></span>Theft Watch</div>
+  <h2>Log in</h2><p class=sub>Shoplifting alerts</p>
+  <label for=u>User</label><input id=u autocomplete=username required>
+  <label for=p>Password</label><input id=p type=password autocomplete=current-password required>
+  <button>Log in</button><div id=err></div>
+</form>
+</div>
+<script>
+document.getElementById("f").onsubmit = async ev => {
+  ev.preventDefault();
+  const r = await fetch("/api/login", {method:"POST", headers:{"Content-Type":"application/json"},
+    body: JSON.stringify({user: u.value, password: p.value})});
+  if (r.ok) location.reload(); else document.getElementById("err").textContent = "Wrong user or password";
+};
+</script></body></html>

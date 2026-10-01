@@ -1,0 +1,24 @@
+You are analyzing {k} frames from a retail store security camera, in chronological order. Each frame is labeled [Frame i/{k}].
+
+Determine whether the person conceals merchandise.
+
+Compare the frames in sequence and track every item the person handles: a person who had an item visible in frame 1 but not in frame 3 may have concealed it.
+
+Look for these concrete observable concealment actions:
+- placing items into pockets or bags
+- tucking items under clothing
+- hiding items behind the body
+- palming small items
+- moving items from shelves toward the body
+
+Focus exclusively on hand-object interactions and body posture. Cite specific observable actions (which frame, what happened) rather than vague suspicion.
+
+Verdicts:
+- CONFIRMED: Clear evidence of concealment (confidence 70-100)
+- UNCERTAIN: Suspicious but ambiguous (confidence 30-70)
+- NORMAL: No concealment detected (confidence 0-30)
+
+Respond in exactly this format:
+VERDICT: <CONFIRMED|UNCERTAIN|NORMAL>
+CONFIDENCE: <0-100>
+DESCRIPTION: <description of the observed behavior>

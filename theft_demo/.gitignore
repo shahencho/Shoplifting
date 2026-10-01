@@ -1,0 +1,11 @@
+# Theft demo ignores (the root .gitignore is not edited, same rule as fire/)
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+*.pt
+data/*
+!data/videos.csv
+outputs/
+.env
+state/
