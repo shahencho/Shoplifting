@@ -65,7 +65,7 @@ class Runtime:
     @property
     def camera_name(self) -> str:
         v = next((v for v in demo_videos() if v["id"] == self.video_id), None)
-        return f"{v['title']} ({v['id']})" if v else (self.video_id or "camera")
+        return v["title"] if v else (self.video_id or "camera")   # no YouTube id: shown in the demo
 
     @property
     def running(self) -> bool:

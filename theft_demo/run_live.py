@@ -93,7 +93,9 @@ def main() -> None:
     if rt.telegram:
         rt.telegram.flush(timeout=10)
     if rt.pipeline:
-        print(f"\nChecks: {len(rt.pipeline.events)}  " +
+        st = rt.pipeline.stats
+        print(f"\nAI: {cfg['verify']['model']}, {st['qwen_calls']} calls, ${st['qwen_cost_usd']:.3f}" if use_qwen else "\nAI: off")
+        print(f"Checks: {len(rt.pipeline.events)}  " +
               "  ".join(f"E{c.n} p{c.tid} t={c.t:.0f}s {c.state}" for c in rt.pipeline.events))
         print(f"Saved: {rt.out_dir.relative_to(ROOT)}")
 

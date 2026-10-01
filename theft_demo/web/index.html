@@ -259,8 +259,8 @@ dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdr
   <h1>Choose the camera</h1><p class=sub>For this demo, a store recording is played as if it were a live camera.</p>
   <div class=camgrid>
     <div class=card>
-      <div class=note><svg class=i><use href="#i-cam"/></svg><div><b>Demo recordings.</b> Real shop CCTV from YouTube, played at camera
-        speed. Person detection (YOLO) was run beforehand, as a GPU would do live; the trigger, the AI check and the alerts run now.</div></div>
+      <div class=note><svg class=i><use href="#i-cam"/></svg><div><b>Demo recordings.</b> We don't have a live store camera for this demo, so we use free shop theft
+        videos from YouTube, played as if they were live.</div></div>
       <label style="margin-top:0">Recording</label>
       <div class=vidlist id=c-vids></div>
       <div class=btns><button class="b primary" id=c-save>Save and continue</button></div>
@@ -268,8 +268,7 @@ dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdr
     </div>
     <div class=card style="opacity:.6">
       <h2 style="display:flex;align-items:center;gap:8px"><svg class=i><use href="#i-lock"/></svg>Live cameras: next step</h2>
-      <p class=muted style="margin:10px 0 0;font-size:14px">Hikvision, Dahua or any RTSP stream, the same as the fire demo.
-        Needs a GPU for person detection at camera speed.</p>
+      <p class=muted style="margin:10px 0 0;font-size:14px">Hikvision, Dahua or any RTSP stream, the same as the fire demo.</p>
       <label>IP address</label><input class=mono placeholder="192.168.1.64" disabled>
       <label>Stream URL</label><input class=mono placeholder="rtsp://user:pass@192.168.1.64:554/..." disabled>
     </div>
@@ -365,7 +364,7 @@ async function refresh(){
   $("#hdrstate").className = "pill " + cls;
   $("#hdrstate").innerHTML = `<span class="dot ${cls === "ok" ? "pulse" : ""}"></span>${txt}`;
   $("#hdrcam").textContent = st.camera || "";
-  $("#hdrsrc").textContent = st.video ? `recording · ${st.video}` : "";
+  $("#hdrsrc").textContent = "";
   $("#hdrdemo").hidden = !st.video;
   if (screen === "live") drawLive();
   if (screen === "alerts") drawLinked();
@@ -394,8 +393,7 @@ function initCamera(){
     if (!chosen) chosen = (vids.find(ok) || {}).id || "";
     $("#c-vids").innerHTML = vids.map(v => `<label class="vid ${ok(v) ? "" : "off"} ${v.id === chosen ? "on" : ""}">
       <input type=radio name=vid value="${esc(v.id)}" ${v.id === chosen ? "checked" : ""} ${ok(v) ? "" : "disabled"}>
-      <span><b>${esc(v.title)} <span class="mono muted" style="font-weight:400">${esc(v.id)}</span></b>
-      <small>${esc(v.notes)}</small>${ok(v) ? "" : `<small style="color:var(--amber)">${v.video ? "YOLO not precomputed yet" : "not downloaded yet"}</small>`}</span></label>`).join("");
+      <span><b>${esc(v.title)}</b>${ok(v) ? "" : `<small style="color:var(--amber)">not ready yet</small>`}</span></label>`).join("");
     $("#c-vids").onchange = ev => { chosen = ev.target.value;
       document.querySelectorAll(".vid").forEach(l => l.classList.toggle("on", l.querySelector("input").value === chosen)); };
   }).catch(e => msg(e.message, false));
@@ -487,15 +485,10 @@ function trend(key, v, goodUp){
   return `<span class="tr ${good ? "good" : "worse"}">${up ? "↑" : "↓"} ${Math.abs(v - p).toFixed(1)}</span>`;
 }
 function drawStats(){
-  const st = S.status, live = st.state === "ok";
-  const fps = live && st.fps ? Number(st.fps) : 0;
-  const ai = st.qwen === "off" ? "off" : String(st.qwen).split("/").pop();
+  const st = S.status;
+  // demo: no technical tiles (fps, frames, AI model, calls, cost); those stay in the server log
   const tiles = [
-    ["Video", fps ? fps.toFixed(0) : "—", "fps", ""],
-    ["Person detection", st.yolo_ms ? Number(st.yolo_ms).toFixed(0) : "—", "ms", `<span class=tr title="YOLO pose was run beforehand; on this laptop's CPU it takes this long per frame">precomputed</span>`],
-    ["Frames checked", Number(st.checks).toLocaleString("en-US"), "", ""],
-    ["AI check", ai, "", st.qwen_calls ? `<span class=tr>${st.qwen_calls} calls</span>` : "", true],
-    ["AI cost", st.qwen_calls ? "$" + Number(st.qwen_cost_usd).toFixed(3) : "—", "", ""],
+    ["Person detection", st.yolo_ms ? Number(st.yolo_ms).toFixed(0) : "—", "ms", ""],
   ];
   $("#l-stats").innerHTML = tiles.map(([l, v, u, tr, txt]) =>
     `<div class=stat><div class=l><span>${l}</span>${tr}</div><div class="v ${txt ? "txt" : ""}" title="${esc(v)}">${esc(v)}${u ? `<small>${u}</small>` : ""}</div></div>`).join("");
