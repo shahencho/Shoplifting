@@ -10,7 +10,7 @@ class FakeTelegram(TelegramNotifier):
     """Records Bot API calls instead of sending them."""
 
     def __init__(self, state_path, chats):
-        state_path.write_text(json.dumps({"chats": chats, "offset": 0}), encoding="utf-8")
+        state_path.write_text(json.dumps({"bot": "TheftBot", "chats": chats, "offset": 0}), encoding="utf-8")
         self.calls = []
         super().__init__("TOKEN", language="en", state_path=state_path)
 
@@ -92,3 +92,17 @@ def test_alert_clip_is_captioned_as_the_main_evidence(tmp_path):
     photo, video = tg.sent("sendPhoto")[-1], tg.sent("sendVideo")[-1]
     assert photo["caption"].startswith("🚨 Likely theft") and "confirmed" not in photo["caption"].lower()
     assert video["caption"] == "🎥 Main evidence" and video["reply_to_message_id"] == 42
+
+
+def test_new_bot_token_resets_linked_chats_and_offset(tmp_path):
+    path = tmp_path / "telegram.json"
+    path.write_text(json.dumps({"bot": "FireBot", "chats": [{"id": 1, "name": "@a"}], "offset": 999}), encoding="utf-8")
+
+    class Fresh(FakeTelegram):
+        def __init__(self, state_path):
+            self.calls = []
+            TelegramNotifier.__init__(self, "TOKEN", language="en", state_path=state_path)
+
+    tg = Fresh(path)
+    assert tg.chats == [] and tg.state["offset"] == 0 and tg.state["bot"] == "TheftBot"
+    assert json.loads(path.read_text(encoding="utf-8"))["bot"] == "TheftBot"

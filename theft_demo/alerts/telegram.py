@@ -104,6 +104,13 @@ class TelegramNotifier(Notifier):
             self.username = self._call("getMe").get("username", "")
         except Exception as e:
             print(f"[telegram] getMe failed: {e}", flush=True)
+        if self.username and self.state.get("bot") != self.username:
+            # another bot token: linked chats and the update offset belong to the old bot (an old offset can make
+            # the new bot's /start invisible), so start fresh
+            if self.state.get("bot") or self.state["chats"] or self.state.get("offset"):
+                print(f"[telegram] bot changed to @{self.username}: linked chats reset, press Start again", flush=True)
+            self.state = {"bot": self.username, "chats": [], "offset": 0}
+            self._save()
         t = TEXT.get(language, TEXT["en"])
         try:        # shows /start and /stop in the bot's menu
             self._call("setMyCommands", data={"commands": json.dumps(
