@@ -98,11 +98,16 @@ def main() -> None:
 
         from fire.web.app import create_app
 
+        class Server(uvicorn.Server):
+            def handle_exit(self, sig, frame):
+                rt.closing = True               # ends live-view streams at Ctrl+C, before uvicorn waits for them
+                super().handle_exit(sig, frame)
+
         print(f"Dashboard: http://localhost:{args.port}  (same network: http://<this-computer-ip>:{args.port})")
         try:
-            # graceful timeout: open live-view connections must not hold Ctrl+C
-            uvicorn.run(create_app(rt), host=args.host, port=args.port, log_level="warning",
-                        timeout_graceful_shutdown=2)
+            # graceful timeout: a backstop if a connection still holds Ctrl+C
+            Server(uvicorn.Config(create_app(rt), host=args.host, port=args.port, log_level="warning",
+                                  timeout_graceful_shutdown=2)).run()
         except KeyboardInterrupt:
             pass
         rt.closing = True

@@ -78,7 +78,7 @@ class Pipeline:
             if (stop and stop.is_set()) or (duration_s and t > duration_s):
                 break
             self.step(idx, t, frame, boxes_for(idx) if boxes_for else None)
-        self.finish(t, wait=not (stop and stop.is_set()))
+        self.finish(t, wait=not (stop and stop.is_set()), stop=stop)
 
     def step(self, idx: int, t: float, frame: np.ndarray, boxes: list[Box] | None = None) -> Persist:
         if boxes is None:
@@ -110,10 +110,13 @@ class Pipeline:
             self.on_frame(frame, boxes, t, p)
         return p
 
-    def finish(self, t: float, wait: bool = True) -> None:
-        """End of a file: wait for Qwen answers still coming (unless stopped), write clips with what the buffer has."""
+    def finish(self, t: float, wait: bool = True, stop: threading.Event | None = None) -> None:
+        """End of a file: wait for Qwen answers still coming (unless stopped, also while waiting: Ctrl+C after the
+        video ended), write clips with what the buffer has."""
         deadline = time.monotonic() + (self.cfg["verify"]["timeout_s"] + 5 if wait else 0)
         while self._verdicts and time.monotonic() < deadline and not all(f.done() for _, f, _ in self._verdicts):
+            if stop and stop.is_set():
+                break
             time.sleep(0.2)
         with self.lock:
             self._collect_verdicts(t, final=True)

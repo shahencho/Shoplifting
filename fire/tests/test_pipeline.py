@@ -1,4 +1,6 @@
 import copy
+import threading
+import time
 from concurrent.futures import Future
 
 import cv2
@@ -113,3 +115,30 @@ def test_early_note_cleared_when_it_never_reaches_the_alert_filter(tmp_path):
 def test_early_note_cleared_when_qwen_says_normal(tmp_path):
     pipe, rec, _ = _run(tmp_path, ["NORMAL"], early=True)
     assert rec.sent == [("early", 1, "watching", False), ("clear", 1, "dismissed", False)]
+
+
+class SilentVerifier(FakeVerifier):
+    """Qwen never answers."""
+
+    def submit(self, frames, crop, cls):
+        self.calls.append((len(frames), len(crop) > 0, cls))
+        return Future()
+
+
+def test_stop_while_waiting_for_qwen_after_the_video_ends(tmp_path):
+    _video(tmp_path / "v.mp4", seconds=12)
+    ver = SilentVerifier([])
+    pipe = Pipeline(_cfg(), Stream(str(tmp_path / "v.mp4"), buffer_s=10, buffer_fps=10), verifier=ver,
+                    notifier=Recorder(), out_dir=tmp_path / "out", log=lambda m: None)
+    stop = threading.Event()
+    th = threading.Thread(target=pipe.run, args=(stop,), kwargs={"boxes_for": lambda idx: [BOX] if idx >= 60 else []},
+                          daemon=True)
+    th.start()
+    deadline = time.monotonic() + 30
+    while pipe.stream.status != "ended" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.5)                                     # now in finish(), waiting for the answer
+    assert ver.calls and th.is_alive()
+    stop.set()
+    th.join(timeout=2)
+    assert not th.is_alive(), "Ctrl+C must not wait for Qwen (timeout_s)"
