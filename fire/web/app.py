@@ -114,7 +114,7 @@ def create_app(rt: Runtime) -> FastAPI:
         tg = rt.telegram
         return {"status": rt.status(), "camera": cam, "events": rt.events(),
                 "telegram": {"enabled": tg is not None, "link": tg.link if tg else "",
-                             "chats": [c["name"] for c in tg.chats] if tg else []}}
+                             "chats": [{"id": c["id"], "name": c["name"]} for c in tg.chats] if tg else []}}
 
     # --- 1. camera ---
 
@@ -196,6 +196,18 @@ def create_app(rt: Runtime) -> FastAPI:
         if not rt.telegram.chats:
             raise HTTPException(400, "nobody is linked yet: scan the QR code and press Start")
         rt.telegram.notify("test")
+        return {"ok": True}
+
+    @app.post("/api/telegram/unlink", dependencies=[Depends(auth)])
+    def telegram_unlink(body: dict = Body(...)):
+        if not rt.telegram:
+            raise HTTPException(400, "TELEGRAM_BOT_TOKEN is not set in fire/.env")
+        try:
+            chat_id = int(body.get("id"))
+        except (TypeError, ValueError):
+            raise HTTPException(400, "id must be a Telegram chat id")
+        if not rt.telegram.unlink(chat_id):
+            raise HTTPException(404, "that chat is not linked")
         return {"ok": True}
 
     @app.post("/api/setup_done", dependencies=[Depends(auth)])

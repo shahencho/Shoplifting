@@ -207,7 +207,7 @@ Frigate+ (Frigate's paid model-training service) needs an API key; Frigate itsel
 |---|---|---|---|
 | 1 | **Camera** | Camera name, brand (Hikvision / Dahua / Other), IP, username, password, channel, **or paste any stream URL** (RTSP, HTTP/MJPEG, HLS, YouTube live; see §6) · **Test connection** → live snapshot appears · **Save**. Opens pre-filled with the Orbeli demo camera, marked as a demo. Hints: use the camera/NVR's own user (not the Hik-Connect / EZVIZ / DMSS app login), RTSP enabled, substream H.264; other brands or ports: paste the full URL | sub/main stream, FPS, frame skip, reconnect timing |
 | 2 | **Detections** | ✅ **Fire** (on) · ✅ **Smoke** (on) · 🔒 Intrusion after hours · 🔒 Loitering near equipment · 🔒 Theft / concealment · 🔒 Crowd / unusual gathering · 🔒 Camera tampering: all "Coming soon" | confidence, persistence window, IoU, cooldowns, Qwen model + prompt + timeout |
-| 3 | **Alerts** | QR code + link to our Telegram bot → press **Start** → "✅ Linked as @name" · **Send test alert** | message language, escalation, quiet hours |
+| 3 | **Alerts** | QR code + link to our Telegram bot → press **Start** → "✅ Linked as @name" · each linked chat with **× Unlink** (see "Telegram linking" below) · **Send test alert** | message language, escalation, quiet hours |
 | 4 | **Live + events** (home) | **Alert banner** for the newest alert (see below) · live view with fire/smoke boxes, "LIVE" badge, camera name, clock · **Camera disconnected** overlay with reconnect spinner when the stream drops · system tiles: stream fps, detector ms, checks, AI model + calls, reconnects, with trend arrows and "Updated Xs ago" · what is being watched (Fire / Smoke) · today's counters (events, alerts, dismissed) · event timeline: snapshot (click to zoom), status tag, class + time, Qwen reason in its own block, clip, **Real / False alarm** buttons · empty state "No alerts today. System monitoring normally." | retention days, clip length, snapshot size |
 
 A top bar on every screen: logo + product name, camera name + brand/IP, status pill ("Monitoring" pulsing green / "Connecting…" amber / "Camera offline" red), a blue **"Demo camera"** pill while the Orbeli demo stream is the source, Live, Settings (re-opens wizard), Log out. On a phone the links collapse to icons.
@@ -216,10 +216,30 @@ A top bar on every screen: logo + product name, camera name + brand/IP, status p
 
 The "money shot" of the demo: unmissable at the top of the live screen.
 
-- Shows the **newest event in an alert state** (confirmed / possible / unverified). Text: "🔥 FIRE CONFIRMED • Alert sent to N people • 14:32:07" (N = linked Telegram chats; "Sending alert…" until the notice is actually sent; "FIRE STILL DETECTED", "POSSIBLE FIRE" or "ALERT (NOT VERIFIED)" for the other cases). Second line: Qwen's reason.
+- Shows the **newest event in an alert state** (confirmed / possible / unverified). Text: "🔥 FIRE CONFIRMED • Alert sent to N people • 14:32:07" (N = linked Telegram chats; "Sending alert…" until the notice is actually sent; "Not sent: no one linked to Telegram" when N = 0; "FIRE STILL DETECTED", "POSSIBLE FIRE" or "ALERT (NOT VERIFIED)" for the other cases). Second line: Qwen's reason.
 - Orange with a slow continuous pulse for confirmed; amber for possible / unverified.
 - **View clip** opens the 8 s evidence clip in a player (disabled until the clip is written). **Acknowledge** dims the banner (pulse stops) and is saved on the server (`POST /api/events/{n}/ack`, stored in the event): no more Telegram alerts or "still detected" reminders for this fire, shared by every viewer. It re-arms once the fire has been gone for 60 s, so a new fire alerts again.
 - **Limitation:** nobody is told on Telegram that the fire was acknowledged.
+
+### Telegram linking / unlinking
+
+Linked chats live in `fire/state/telegram.json` (one list per machine, shared by the Telegram listener, the web UI and the sender, all behind one lock).
+
+- **Link:** scan the QR, press **Start** in Telegram (done).
+- **Unlink from Telegram:** send **`/stop`** to the bot → chat removed, bot replies "Unlinked. No more alerts." (done).
+- **Unlink from the UI:** `/api/state` returns `{id, name}` per chat; screen 3 shows each linked chat with **×**; `POST /api/telegram/unlink {id}` removes it (after a confirm), saves the file and sends "Unlinked" to that chat.
+- **Discoverability:** register `/start` and `/stop` in the bot menu (`setMyCommands`); the "Linked" message ends with "Send /stop to unlink".
+- **Blocked bot:** if Telegram answers "bot was blocked by the user" (or "chat not found", "user is deactivated", "bot was kicked"), that chat is dropped automatically. Other errors (rate limit, network) keep the chat.
+
+**Effect on a running video / camera:** none on detection, Qwen, events, clips or the banner. Every Telegram message reads the linked list at send time, so an unlink takes effect from the next message, no restart:
+- unlinked between the early note and the alert → that chat got the note, gets no alert / all clear; other chats unaffected;
+- linked mid-event → gets the alert as a normal message (no early note to reply to);
+- nobody linked → events still recorded; nothing sent; **Send test alert** refuses with "nobody is linked yet".
+
+**Fixed with this:**
+- **One failing chat doesn't block the rest:** each chat's send has its own error handling (before, a blocked chat early in the list stopped alerts to everyone after it).
+- **Banner with 0 chats:** says "Not sent: no one linked to Telegram" (or "Telegram not set up") instead of "Alert sent".
+- **Tests** (`fire/tests/test_telegram.py`): unlink saves and tells only that chat; unlink between early note and alert; blocked chat dropped, others still get the alert; temporary errors keep the chat; nobody linked; bot menu; `/api/telegram/unlink` endpoint.
 
 ### Look and feel (UI v2, 2026-10-01)
 

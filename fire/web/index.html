@@ -86,6 +86,10 @@ button:disabled{opacity:.5;cursor:default}
 .sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
 .qr{display:flex;gap:22px;align-items:center;flex-wrap:wrap}.qr img{width:190px;height:190px;background:#fff;border-radius:12px;padding:8px}
 .qr a{color:var(--accent-ink);word-break:break-all}
+.linked{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.linked li{display:flex;align-items:center;gap:8px;color:var(--ok);font-size:14px}
+.linked button{background:none;border:1px solid var(--line2);color:inherit;opacity:.7;border-radius:8px;min-width:32px;min-height:32px;cursor:pointer;font-size:16px;line-height:1}
+.linked button:hover{opacity:1;color:var(--bad)}
 
 /* live */
 .banner{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:14px;background:var(--accent);color:#0B0D10;margin-bottom:18px;
@@ -289,9 +293,9 @@ dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdr
 
 <template id=t-alerts><div class=wiz>
   <ol class=steps><li class=done><a href="#camera"><span class=n>✓</span>Camera</a></li><li class=done><a href="#detections"><span class=n>✓</span>Detections</a></li><li class=on><a href="#alerts"><span class=n>3</span>Alerts (Telegram)</a></li></ol>
-  <h1>Get alerts on Telegram</h1><p class=sub>Scan the code with your phone, open the bot in Telegram and press <b>Start</b>.</p>
+  <h1>Get alerts on Telegram</h1><p class=sub>Scan the code with your phone, open the bot in Telegram and press <b>Start</b>. To stop alerts, press × here or send <b>/stop</b> to the bot.</p>
   <div class=card>
-    <div class=qr><img id=a-qr alt="Telegram QR code"><div><a id=a-link target=_blank></a><p id=a-linked class=msg></p></div></div>
+    <div class=qr><img id=a-qr alt="Telegram QR code"><div><a id=a-link target=_blank></a><div id=a-linked class=msg></div></div></div>
     <div class=btns><button class=b id=a-test>Send test alert</button><button class="b primary" id=a-done>Finish</button></div>
     <div class=msg id=a-msg></div>
   </div>
@@ -435,14 +439,28 @@ function drawLinked(){
   const t = S.telegram, el = $("#a-linked");
   if (!el) return;
   if (!t.enabled){ el.textContent = "Telegram bot is not configured on the server (TELEGRAM_BOT_TOKEN)."; el.className = "msg bad"; return; }
-  el.textContent = t.chats.length ? "✓ Linked as " + t.chats.join(", ") : "Waiting for Start…";
+  const sig = JSON.stringify(t.chats);
+  if (el.dataset.sig === sig) return;       // redrawn every 2 s: don't swap the × under the user's finger
+  el.dataset.sig = sig;
   el.className = "msg " + (t.chats.length ? "good" : "");
+  el.innerHTML = t.chats.length
+    ? `<ul class=linked>${t.chats.map(c => `<li>✓ Linked as ${esc(c.name)}<button data-unlink="${esc(c.id)}" data-name="${esc(c.name)}" title="Unlink ${esc(c.name)}" aria-label="Unlink ${esc(c.name)}">×</button></li>`).join("")}</ul>`
+    : "Waiting for Start…";
 }
 function initAlerts(){
   const t = S.telegram;
   if (t.enabled && t.link){ $("#a-qr").src = "/api/telegram/qr.png"; $("#a-link").href = t.link; $("#a-link").textContent = t.link; }
   else $("#a-qr").hidden = true;
   drawLinked();
+  $("#a-linked").onclick = async ev => {
+    const b = ev.target.closest("[data-unlink]");
+    if (!b) return;
+    const name = b.dataset.name;
+    if (!confirm(`Unlink ${name}? They will stop getting fire alerts.`)) return;
+    b.disabled = true;
+    try { await api("/api/telegram/unlink", {id: Number(b.dataset.unlink)}); await refresh(); toast(`Unlinked ${name}`); }
+    catch(e){ b.disabled = false; msg(e.message, false); }
+  };
   const msg = (x, ok) => { $("#a-msg").textContent = x; $("#a-msg").className = "msg " + (ok ? "good" : "bad"); };
   $("#a-test").onclick = async () => { try { await api("/api/telegram/test", {}); msg("Test alert sent. Check your phone.", true); }
                                        catch(e){ msg(e.message, false); } };
@@ -525,7 +543,8 @@ function drawBanner(){
   const ack = isAcked(e), conf = e.state === "confirmed", clip = (e.files || {}).clip;
   const head = conf ? (e.kind === "still" ? "FIRE STILL DETECTED" : "FIRE CONFIRMED")
              : e.state === "possible" ? "POSSIBLE FIRE" : "ALERT (NOT VERIFIED)";
-  const sent = !e.sent.length ? "Sending alert…" : chats ? `Alert sent to ${chats} ${chats === 1 ? "person" : "people"}` : "Alert sent";
+  const sent = !chats ? (S.telegram.enabled ? "Not sent: no one linked to Telegram" : "Not sent: Telegram not set up")
+             : !e.sent.length ? "Sending alert…" : `Alert sent to ${chats} ${chats === 1 ? "person" : "people"}`;
   const sub = ack ? "Acknowledged" : e.reason ? `“${e.reason}”` : (S.status.camera || "");
   el.innerHTML = `<div class="banner ${conf ? "" : "amber"} ${ack ? "ack" : ""}" role="alert">
     <span class=bic>${icon("alert")}</span>

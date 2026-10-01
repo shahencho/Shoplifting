@@ -1,6 +1,7 @@
 """Telegram alerts: /start linking, photo + clip + Qwen's reason, camera offline notices.
 
-Anyone who sends /start to the bot is linked (demo: one client, no accounts); /stop unlinks.
+Anyone who sends /start to the bot is linked (demo: one client, no accounts); /stop or the dashboard unlinks,
+and a chat that blocked the bot is dropped on the next send.
 Linked chats are kept in fire/state/telegram.json. Sending runs in a background thread so detection
 never waits for Telegram.
 
@@ -35,7 +36,9 @@ TEXT = {
         "smoke": "smoke", "fire": "fire",
         "offline": "📷 Camera offline for {min} min", "online": "📷 Camera back online",
         "test": "✅ Test alert from the fire demo. Alerts will arrive here.",
-        "linked": "✅ Linked as {name}. Fire alerts will arrive in this chat.", "unlinked": "Unlinked. No more alerts.",
+        "linked": "✅ Linked as {name}. Fire alerts will arrive in this chat. Send /stop to unlink.",
+        "unlinked": "Unlinked. No more alerts.",
+        "cmd_start": "Get fire alerts in this chat", "cmd_stop": "Stop fire alerts",
     },
     "hy": {
         "confirmed": "🔥 Հրդեհը հաստատված է", "still": "🔥 Հրդեհը դեռ հայտնաբերվում է",
@@ -45,10 +48,14 @@ TEXT = {
         "smoke": "ծուխ", "fire": "կրակ",
         "offline": "📷 Տեսախցիկն անջատված է {min} րոպե", "online": "📷 Տեսախցիկը կրկին միացված է",
         "test": "✅ Փորձնական ծանուցում։ Ահազանգերը կգան այստեղ։",
-        "linked": "✅ Կապված է որպես {name}։ Հրդեհի ահազանգերը կգան այս զրույցում։",
+        "linked": "✅ Կապված է որպես {name}։ Հրդեհի ահազանգերը կգան այս զրույցում։ Կապը հանելու համար ուղարկեք /stop։",
         "unlinked": "Կապը հանված է։ Ահազանգեր այլևս չեն գա։",
+        "cmd_start": "Ստանալ հրդեհի ահազանգեր այս զրույցում", "cmd_stop": "Դադարեցնել ահազանգերը",
     },
 }
+
+# Telegram errors that mean the chat will never accept messages again: drop it instead of retrying forever
+GONE = ("bot was blocked by the user", "chat not found", "user is deactivated", "bot was kicked")
 
 
 def title(kind: str, ev, lang: str) -> str:
@@ -100,6 +107,12 @@ class TelegramNotifier(Notifier):
             self.username = self._call("getMe").get("username", "")
         except Exception as e:
             print(f"[telegram] getMe failed: {e}", flush=True)
+        t = TEXT.get(language, TEXT["en"])
+        try:        # shows /start and /stop in the bot's menu
+            self._call("setMyCommands", data={"commands": json.dumps(
+                [{"command": "start", "description": t["cmd_start"]}, {"command": "stop", "description": t["cmd_stop"]}])})
+        except Exception as e:
+            print(f"[telegram] setMyCommands failed: {e}", flush=True)
         self.sender = threading.Thread(target=self._send_loop, daemon=True, name="telegram-send")
         self.sender.start()
         self.poller: threading.Thread | None = None
@@ -117,6 +130,19 @@ class TelegramNotifier(Notifier):
 
     def notify(self, kind: str, event=None, **info) -> None:
         self.q.put((kind, event, info))
+
+    def unlink(self, chat_id: int, *, tell: bool = True) -> bool:
+        """Remove a linked chat (dashboard ×, /stop, or a chat that blocked the bot). tell: send "Unlinked" to it."""
+        with self.lock:
+            before = len(self.state["chats"])
+            self.state["chats"] = [c for c in self.state["chats"] if c["id"] != chat_id]
+            removed = len(self.state["chats"]) < before
+        if removed:
+            self._save()
+            print(f"[telegram] unlinked {chat_id}", flush=True)
+            if tell:
+                self.q.put(("unlinked", None, {"chat_id": chat_id}))
+        return removed
 
     def start_linking(self) -> None:
         if self.poller is None:
@@ -151,8 +177,24 @@ class TelegramNotifier(Notifier):
         mid = ev.msg_ids.get(str(chat["id"])) if getattr(ev, "msg_ids", None) else None
         return {"reply_to_message_id": mid, "allow_sending_without_reply": "true"} if mid else {}
 
+    def _each(self, kind: str, send) -> int:
+        """send(chat) to every linked chat; one failing chat doesn't stop the others. Returns how many got it."""
+        ok = 0
+        for chat in self.chats:
+            try:
+                send(chat)
+                ok += 1
+            except Exception as e:
+                print(f"[telegram] {kind} to {chat.get('name', chat['id'])} failed: {e}", flush=True)
+                if any(g in str(e).lower() for g in GONE):
+                    self.unlink(chat["id"], tell=False)
+        return ok
+
     def _send(self, kind: str, ev, info: dict) -> None:
         t = TEXT.get(self.lang, TEXT["en"])
+        if kind == "unlinked":          # to the one chat that was just removed, not to everyone
+            self._call("sendMessage", data={"chat_id": info["chat_id"], "text": t["unlinked"]})
+            return
         cam = (self.camera() if callable(self.camera) else self.camera) if ev else ""   # current name
         if kind == "early":
             caption = f"{t['early'].format(what=t.get(ev.box.cls, ev.box.cls))}\n📷 {cam} · {self.clock(ev)}"
@@ -160,7 +202,7 @@ class TelegramNotifier(Notifier):
                 caption += f"\n{timing(ev, kind='early')}"
             photo = ev.files.get("snapshot_path")
             silent = {"disable_notification": "true"} if self.early_silent else {}
-            for chat in self.chats:
+            def send(chat):
                 if photo and Path(photo).exists():
                     with open(photo, "rb") as f:
                         m = self._call("sendPhoto", data={"chat_id": chat["id"], "caption": caption[:1024], **silent},
@@ -168,15 +210,15 @@ class TelegramNotifier(Notifier):
                 else:
                     m = self._call("sendMessage", data={"chat_id": chat["id"], "text": caption, **silent})
                 ev.msg_ids[str(chat["id"])] = m.get("message_id")
-            print(f"[telegram] early E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
+            print(f"[telegram] early E{ev.n} -> {self._each(kind, send)} chat(s)", flush=True)
         elif kind == "clear":
             text = f"{t['clear']}\n📷 {cam} · {self.clock(ev)}"
             if ev.reason:
                 text += f"\n{ev.reason}"
             silent = {"disable_notification": "true"} if self.early_silent else {}
-            for chat in self.chats:
-                self._call("sendMessage", data={"chat_id": chat["id"], "text": text, **silent, **self._reply(ev, chat)})
-            print(f"[telegram] clear E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
+            n = self._each(kind, lambda chat: self._call("sendMessage", data={
+                "chat_id": chat["id"], "text": text, **silent, **self._reply(ev, chat)}))
+            print(f"[telegram] clear E{ev.n} -> {n} chat(s)", flush=True)
         elif kind in ("alert", "upgrade"):
             head = title(kind, ev, self.lang)
             caption = f"{head}\n📷 {cam} · {self.clock(ev)}"
@@ -186,7 +228,7 @@ class TelegramNotifier(Notifier):
                 caption += f"\n{ev.reason}"
             photo = ev.files.get("snapshot_path")
             clip = ev.files.get("clip_path")
-            for chat in self.chats:
+            def send(chat):
                 reply = self._reply(ev, chat)
                 if kind == "alert" and photo and Path(photo).exists():
                     with open(photo, "rb") as f:
@@ -198,12 +240,11 @@ class TelegramNotifier(Notifier):
                     with open(clip, "rb") as f:
                         self._call("sendVideo", data={"chat_id": chat["id"], "supports_streaming": "true", **reply},
                                    files={"video": f})
-            print(f"[telegram] {kind} E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
+            print(f"[telegram] {kind} E{ev.n} -> {self._each(kind, send)} chat(s)", flush=True)
         else:
             text = t.get(kind, kind).format(**info)
-            for chat in self.chats:
-                self._call("sendMessage", data={"chat_id": chat["id"], "text": text})
-            print(f"[telegram] {kind} -> {len(self.chats)} chat(s)", flush=True)
+            n = self._each(kind, lambda chat: self._call("sendMessage", data={"chat_id": chat["id"], "text": text}))
+            print(f"[telegram] {kind} -> {n} chat(s)", flush=True)
 
     # --- linking ---
 
@@ -231,9 +272,8 @@ class TelegramNotifier(Notifier):
                     self._call("sendMessage", data={"chat_id": chat["id"], "text": t["linked"].format(name=name)})
                     print(f"[telegram] linked {name}", flush=True)
                 elif text.startswith("/stop"):
-                    with self.lock:
-                        self.state["chats"] = [c for c in self.state["chats"] if c["id"] != chat["id"]]
-                    self._call("sendMessage", data={"chat_id": chat["id"], "text": t["unlinked"]})
+                    if not self.unlink(chat["id"]):         # not linked: still answer, so /stop never looks ignored
+                        self._call("sendMessage", data={"chat_id": chat["id"], "text": t["unlinked"]})
             self._save()
 
     # --- plumbing ---
