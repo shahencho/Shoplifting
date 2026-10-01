@@ -15,11 +15,12 @@ from pathlib import Path
 from fastapi import Body, Depends, FastAPI, HTTPException, Request
 from fastapi.responses import FileResponse, HTMLResponse, JSONResponse, Response, StreamingResponse
 
-from fire.runtime import Runtime, camera_url, test_camera
+from fire.runtime import FIRE, ROOT, Runtime, camera_url, test_camera
 from fire.stream import is_file
 
 WEB = Path(__file__).resolve().parent
 COOKIE = "fire_session"
+VIDEO_EXTS = {".mp4", ".mkv", ".avi", ".mov", ".webm", ".m4v"}
 
 
 def create_app(rt: Runtime) -> FastAPI:
@@ -84,6 +85,14 @@ def create_app(rt: Runtime) -> FastAPI:
         if not cam["password"] and old.get("password") and not cam["url"]:
             cam["password"] = old["password"]      # empty field = keep the saved password
         return cam
+
+    @app.get("/api/videos", dependencies=[Depends(auth)])
+    def videos():
+        """Test recordings in fire/data, as paths the camera URL field accepts (relative to the repo root)."""
+        data = FIRE / "data"
+        files = sorted(f for f in data.iterdir() if f.is_file() and f.suffix.lower() in VIDEO_EXTS) if data.is_dir() else []
+        return [{"name": f.stem, "path": f.relative_to(ROOT).as_posix(), "mb": round(f.stat().st_size / 1e6, 1)}
+                for f in files]
 
     @app.post("/api/camera/test", dependencies=[Depends(auth)])
     def camera_test(body: dict = Body(...)):

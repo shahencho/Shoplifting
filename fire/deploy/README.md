@@ -54,8 +54,9 @@ Not touched by deploys: `fire/.env`, `fire/state/` (saved camera, linked Telegra
 | Task | Command |
 |---|---|
 | Live log | `ssh do-deploy "pm2 logs fire-demo"` |
+| Qwen on / off | `ssh do-deploy "bash ~/Shoplifting/fire/deploy/qwen.sh on"` (`off`, `status`) |
 | Restart / stop | `ssh do-deploy "pm2 restart fire-demo"` / `pm2 stop fire-demo` |
-| Copy a test video up | `scp fire/data/BJ9ng9L1CA0.mp4 do-deploy:Shoplifting/fire/data/` |
+| Copy test videos up | `scp fire/data/*.mp4 do-deploy:Shoplifting/fire/data/` (they show in Settings → Camera → Test video; not in git) |
 | Get event evidence | `scp -r do-deploy:Shoplifting/fire/outputs/live ./fire/outputs/from_droplet` |
 | Stream check from the droplet | `ssh do-deploy "cd Shoplifting && fire/.venv/bin/python -m fire.tools.stream_check"` |
 
@@ -63,9 +64,11 @@ Event folders older than 14 days are deleted daily (`/etc/cron.daily/fire-demo-c
 
 ## Current test mode
 
-- **Qwen is off** (`--no-qwen` in `ecosystem.config.js`): YOLO + the 3 s filter alone decide. Every event goes to
+- **Qwen is off** (`FIRE_QWEN=off` in `fire/.env`): YOLO + the 3 s filter alone decide. Every event goes to
   Telegram as "Possible fire (not verified)" with photo, clip and a timing line
-  (`⏱ YOLO <first seen> → alert <trigger> (+s) · sent +s`). Remove `--no-qwen` and deploy to turn Qwen back on.
+  (`⏱ YOLO <first seen> → alert <trigger> (+s) · sent +s`). Switch it with
+  `ssh do-deploy "bash ~/Shoplifting/fire/deploy/qwen.sh on"` (or `off` / `status`). It restarts the app and stays
+  set across deploys (`fire/.env` is never touched by them; the deploy only adds `FIRE_QWEN=off` if the line is missing).
 - **Early note** (`alerts.early_note` in `config.yaml`): at 60% of checks over 3 s a silent
   "🟡 Suspicious smoke/fire, checking…" with photo; the alert or "✅ all clear" (after 15 s) follows as a reply.
 - **Video files never play by themselves.** After a start, deploy or camera save the dashboard shows "Video ready";

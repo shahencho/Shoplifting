@@ -8,8 +8,8 @@ module.exports = {
     name: "fire-demo",
     cwd: path.resolve(__dirname, "../.."),
     script: "fire/.venv/bin/python",
-    // --no-qwen: testing YOLO alone for now (no API cost); every event goes to Telegram as "not verified"
-    args: "-m fire.run_live --host 127.0.0.1 --port 8010 --no-qwen",
+    // Qwen on/off: FIRE_QWEN in fire/.env, switched with fire/deploy/qwen.sh (survives deploys)
+    args: "-m fire.run_live --host 127.0.0.1 --port 8010",
     interpreter: "none",
     env: {
       PYTHONUNBUFFERED: "1",

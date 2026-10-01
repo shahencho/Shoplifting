@@ -259,6 +259,7 @@ dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdr
         <li>RTSP must be on in the camera settings. Substream: H.264, stream encryption off.</li>
         <li>Other brand or a different port? Paste the full stream URL below.</li>
       </ul>
+      <div id=c-vidrow hidden><label for=c-vid>Test video (fire/data)</label><select id=c-vid><option value="">Choose a recording…</option></select></div>
       <div class=or>or paste a full stream URL (RTSP, HTTP, HLS, YouTube live)</div>
       <input id=c-url class=mono placeholder="rtsp://user:pass@192.168.1.64:554/..." style="margin-top:6px">
       <div class=btns><button class=b id=c-test>Test connection</button><button class="b primary" id=c-save>Save and continue</button></div>
@@ -390,6 +391,22 @@ function initCamera(){
   if (c.has_password) $("#c-pass").placeholder = "saved (leave empty to keep)";
   if (c.demo){ const note = () => $("#c-demo").hidden = $("#c-url").value.trim() !== c.url; note(); $("#c-url").oninput = note; }
   const msg = (t, ok) => { $("#c-msg").textContent = t; $("#c-msg").className = "msg " + (ok ? "good" : "bad"); };
+  api("/api/videos").then(vids => {   // recordings in fire/data: pick one to test, then Save and press Play
+    if (!vids.length || !$("#c-vid")) return;
+    for (const v of vids) $("#c-vid").add(new Option(`${v.name} (${v.mb} MB)`, v.path));
+    $("#c-vid").value = vids.some(v => v.path === $("#c-url").value) ? $("#c-url").value : "";
+    $("#c-vidrow").hidden = false;
+  }).catch(() => {});
+  $("#c-vid").onchange = ev => {
+    const v = ev.target.value;
+    if (!v) return;
+    const prev = $("#c-url").value, wasVideo = [...ev.target.options].some(o => o.value && o.value === prev);
+    $("#c-url").value = v; $("#c-brand").value = "other";
+    if (!$("#c-name").value.trim() || wasVideo || c.demo) $("#c-name").value = ev.target.selectedOptions[0].text.replace(/ \(.*$/, "");
+    $("#c-url").dispatchEvent(new Event("input"));
+    msg("Video chosen: Save, then press Play on the Live page", true);
+  };
+  $("#c-url").addEventListener("input", () => { if ($("#c-vid").value && $("#c-url").value !== $("#c-vid").value) $("#c-vid").value = ""; });
   $("#c-test").onclick = async () => {
     $("#c-test").disabled = true; msg("Connecting to the camera…", true); $("#c-snap").hidden = true;
     $("#c-ph").hidden = false; $("#c-ph").innerHTML = `<span style="display:flex;gap:8px;align-items:center"><span class=spin></span>Connecting…</span>`;

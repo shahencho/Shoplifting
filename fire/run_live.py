@@ -10,11 +10,13 @@ Usage (from the repo root, with the fire venv):
           Without it the camera saved in the dashboard setup is used.
 --no-web: console only; --no-qwen: every event is an unverified alert (no API calls).
 Secrets in fire/.env: VLM_API_KEY, TELEGRAM_BOT_TOKEN, DEMO_USER / DEMO_PASSWORD.
+FIRE_QWEN=off in fire/.env works like --no-qwen and survives deploys (droplet: fire/deploy/qwen.sh on|off).
 Output: fire/outputs/live/<camera>_<time>/events/E001/ (snapshot, crop, clip, event.json) + events.jsonl
 """
 from __future__ import annotations
 
 import argparse
+import os
 import time
 from pathlib import Path
 
@@ -40,6 +42,11 @@ def load_cameras(path: Path = FIRE / "cameras.txt") -> dict[str, str]:
     return cams
 
 
+def qwen_enabled(no_qwen_flag: bool) -> bool:
+    """Qwen runs unless --no-qwen is given or fire/.env says FIRE_QWEN=off."""
+    return not no_qwen_flag and os.getenv("FIRE_QWEN", "on").strip().lower() not in ("off", "0", "false", "no")
+
+
 def main() -> None:
     ap = argparse.ArgumentParser()
     ap.add_argument("--source", help="video file, stream URL, or a name from fire/cameras.txt (default: saved camera)")
@@ -53,6 +60,7 @@ def main() -> None:
     args = ap.parse_args()
 
     load_dotenv(FIRE / ".env")
+    use_qwen = qwen_enabled(args.no_qwen)
     from fire.alerts.telegram import from_env
     from fire.runtime import Runtime
     from fire.stream import is_file, split_start
@@ -67,14 +75,14 @@ def main() -> None:
     elif source:
         name = name or "camera"
 
-    rt = Runtime(cfg, use_qwen=not args.no_qwen, realtime_files=not args.fast)
+    rt = Runtime(cfg, use_qwen=use_qwen, realtime_files=not args.fast)
     rt.name_override = name
     rt.telegram = from_env(cfg, camera=lambda: rt.camera_name)
     if rt.telegram:
         rt.notifier = rt.telegram
         rt.telegram.start_linking()
         print(f"[telegram] bot {rt.telegram.link}  linked: {[c['name'] for c in rt.telegram.chats] or 'nobody yet'}")
-    print(f"Qwen: {cfg['verify']['model'] if not args.no_qwen else 'off'} (timeout {cfg['verify']['timeout_s']} s)  "
+    print(f"Qwen: {cfg['verify']['model'] if use_qwen else 'off'} (timeout {cfg['verify']['timeout_s']} s)  "
           f"detections: {rt.enabled}")
     rt.start(source)
 

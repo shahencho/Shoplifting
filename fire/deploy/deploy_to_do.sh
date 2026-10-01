@@ -39,6 +39,13 @@ main() {
     fi
   done
 
+  # Qwen on/off lives in fire/.env (fire/deploy/qwen.sh). Off until switched on, as before this setting.
+  if ! grep -Eq '^FIRE_QWEN=' fire/.env; then
+    [ -z "$(tail -c1 fire/.env)" ] || echo >> fire/.env
+    echo "FIRE_QWEN=off" >> fire/.env
+  fi
+  echo "    Qwen: $(grep -E '^FIRE_QWEN=' fire/.env | tail -1 | cut -d= -f2-)  (switch: fire/deploy/qwen.sh on|off)"
+
   echo "==> Python venv"
   [ -x "$PY" ] || python3 -m venv fire/.venv
   $PY -m pip install -q --upgrade pip
