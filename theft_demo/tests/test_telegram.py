@@ -1,4 +1,5 @@
 import json
+import threading
 import time
 
 from theft_demo.alerts.telegram import TelegramNotifier, timing
@@ -61,3 +62,17 @@ def test_timing_line_mentions_ai_and_alert():
     c.qwen_s, c.queue_s = 40.0, 0.0
     line = timing(c, "alert")
     assert "AI 40 s" in line and "after the act" in line
+
+
+def test_link_shows_start_again_in_an_existing_chat_and_start_with_parameter_links(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", [])
+    assert tg.link == "https://t.me/TheftBot?start=theft"
+    update = {"update_id": 7, "message": {"text": "/start theft", "chat": {"id": 9, "username": "shop"}}}
+    tg._call = lambda method, data=None, files=None, timeout=60: [update] if method == "getUpdates" else {"message_id": 1}
+    threading.Thread(target=tg._poll_loop, daemon=True).start()
+    for _ in range(50):
+        if tg.chats:
+            break
+        time.sleep(0.05)
+    tg._stop.set()
+    assert [c["name"] for c in tg.chats] == ["@shop"]

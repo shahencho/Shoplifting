@@ -120,7 +120,9 @@ class TelegramNotifier(Notifier):
 
     @property
     def link(self) -> str:
-        return f"https://t.me/{self.username}" if self.username else ""
+        """Deep link with a start parameter: Telegram then shows the Start button even in a chat that already
+        exists (e.g. linked for the fire demo with the same bot), and pressing it sends "/start theft"."""
+        return f"https://t.me/{self.username}?start=theft" if self.username else ""
 
     def notify(self, kind: str, event=None, **info) -> None:
         self.q.put((kind, event, info))
