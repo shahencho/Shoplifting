@@ -54,6 +54,9 @@ def main() -> None:
         rt.notifier = rt.telegram
         rt.telegram.start_linking()
         print(f"[telegram] bot {rt.telegram.link}  linked: {[c['name'] for c in rt.telegram.chats] or 'nobody yet'}")
+        if not rt.telegram.chats:
+            print(f"[telegram] nobody linked to the theft demo yet: open {rt.telegram.link} and send /start (type it if "
+                  f"you already chat with this bot, e.g. from the fire demo: Telegram shows no Start button then)")
     print(f"Qwen: {cfg['verify']['model'] if use_qwen else 'off'} (timeout {cfg['verify']['timeout_s']} s)")
     if args.source:
         rt.start(args.source, play=True)
