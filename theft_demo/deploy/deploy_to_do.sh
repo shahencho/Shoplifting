@@ -32,12 +32,19 @@ main() {
     echo "FATAL: theft_demo/.env is missing or empty. Create it first (theft_demo/deploy/README.md)."
     exit 1
   fi
-  for key in VLM_API_KEY TELEGRAM_BOT_TOKEN DEMO_PASSWORD; do
+  for key in VLM_API_KEY DEMO_PASSWORD; do
     if ! grep -Eq "^${key}=.+" theft_demo/.env; then
       echo "FATAL: $key is empty in theft_demo/.env (DEMO_PASSWORD is required here: the dashboard is on the internet)."
       exit 1
     fi
   done
+  tok=$(grep -E '^TELEGRAM_BOT_TOKEN=' theft_demo/.env | tail -1 | cut -d= -f2- || true)
+  if [ -z "$tok" ]; then
+    echo "    WARNING: TELEGRAM_BOT_TOKEN is empty: alerts are only logged until the theft bot's token is set"
+  elif [ -f "$HOME/Shoplifting/fire/.env" ] && grep -qxF "TELEGRAM_BOT_TOKEN=$tok" "$HOME/Shoplifting/fire/.env"; then
+    echo "FATAL: TELEGRAM_BOT_TOKEN is the fire demo's bot: both apps would poll it (409 Conflict). Use the theft bot."
+    exit 1
+  fi
   echo "    Qwen: $(grep -E '^THEFT_QWEN=' theft_demo/.env | tail -1 | cut -d= -f2- || true)  (THEFT_QWEN in theft_demo/.env, default on)"
 
   echo "==> Python venv"

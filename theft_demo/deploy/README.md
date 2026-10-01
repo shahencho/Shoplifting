@@ -31,7 +31,8 @@ droplet ──► OpenRouter (Qwen) · Telegram (its own bot)                   
    ssh do-deploy "THEFT_DOMAIN=theft.alarmius.duckdns.org bash -s" < theft_demo/deploy/setup_droplet.sh
    ```
 3. Secrets: `~/Shoplifting-theft/theft_demo/.env` (chmod 600): `VLM_API_URL`, `VLM_API_KEY`, `TELEGRAM_BOT_TOKEN`
-   (the theft bot), `DEMO_USER`, `DEMO_PASSWORD` (strong: it's on the internet), `THEFT_QWEN` (`on` / `off`).
+   (the theft bot; empty = alerts only logged; the fire bot's token is refused), `DEMO_USER`, `DEMO_PASSWORD`
+   (strong: it's on the internet), `THEFT_QWEN` (`on` / `off`). After changing it: `pm2 restart theft-demo --update-env`.
 4. Recordings + YOLO tracks:
    ```bash
    ssh do-deploy "mkdir -p Shoplifting-theft/theft_demo/data/tracks"
