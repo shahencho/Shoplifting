@@ -82,7 +82,7 @@ class Pipeline:
             with self.lock:
                 for ev in self.trigger.flush():          # episodes still open when the video ends
                     self._on_episode(ev, t)
-        self.finish(t, wait=not stopped)
+        self.finish(t, wait=not stopped, stop=stop)
 
     def step(self, idx: int, t: float, frame: np.ndarray) -> None:
         det = self._det(idx, t)
@@ -101,9 +101,9 @@ class Pipeline:
         if self.on_frame:
             self.on_frame(frame, det, t, self.person_states())
 
-    def finish(self, t: float, wait: bool = True) -> None:
+    def finish(self, t: float, wait: bool = True, stop: threading.Event | None = None) -> None:
         """End of the video: write the clips with what the buffer has, then hand over each Qwen answer as it
-        arrives (unless stopped), then timing.md."""
+        arrives (unless stopped, also while waiting: Ctrl+C after the video ended), then timing.md."""
         with self.lock:
             self._finish_clips(t, final=True)
         deadline = time.monotonic() + (self.cfg["verify"]["timeout_s"] + 5 if wait else 0)
@@ -112,7 +112,7 @@ class Pipeline:
                 self._collect_verdicts()
                 for n in self.em.poll(float("inf")):     # nothing can join any more
                     self._send(n)
-            if not self._verdicts or time.monotonic() >= deadline:
+            if not self._verdicts or time.monotonic() >= deadline or (stop and stop.is_set()):
                 break
             time.sleep(0.2)
         (self.out_dir / "timing.md").write_text(timing_report(self.em), encoding="utf-8")

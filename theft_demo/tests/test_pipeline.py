@@ -1,4 +1,6 @@
 import copy
+import threading
+import time
 from concurrent.futures import Future
 
 import cv2
@@ -100,3 +102,31 @@ def test_flagged_person_is_not_checked_again(tmp_path):
     pipe, rec, ver = _run(tmp_path, ["CONFIRMED"], [(1, 2.0, 3.0, 5.0), (1, 8.0, 9.0, 11.0)])
     assert len(ver.calls) == 1 and pipe.em.skipped[0]["why"] == "person already flagged"
     assert [s[0] for s in rec.sent] == ["early", "alert"]
+
+
+class SilentVerifier(FakeVerifier):
+    """Qwen never answers."""
+
+    def submit(self, frames):
+        self.calls.append(len(frames))
+        return Future()
+
+
+def test_stop_while_waiting_for_qwen_after_the_video_ends(tmp_path):
+    _video(tmp_path / "v.mp4")
+    cfg = copy.deepcopy(yaml.safe_load((DEMO / "config.yaml").read_text(encoding="utf-8")))
+    pipe = Pipeline(cfg, Stream(str(tmp_path / "v.mp4"), buffer_s=15, buffer_fps=10), _tracks(),
+                    verifier=SilentVerifier([]), notifier=Recorder(), out_dir=tmp_path / "out", log=lambda m: None)
+    pipe.trigger = FakeTrigger([(1, 3.0, 4.5, 6.5)])
+    stop = threading.Event()
+    th = threading.Thread(target=pipe.run, args=(stop,), daemon=True)
+    th.start()
+    deadline = time.monotonic() + 30
+    while pipe.stream.status != "ended" and time.monotonic() < deadline:
+        time.sleep(0.05)
+    time.sleep(0.5)                                     # now in finish(), waiting for the answer
+    assert th.is_alive()
+    stop.set()
+    th.join(timeout=2)
+    assert not th.is_alive(), "Ctrl+C must not wait for Qwen (timeout_s)"
+    assert (tmp_path / "out" / "timing.md").exists()

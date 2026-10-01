@@ -75,10 +75,15 @@ def main() -> None:
 
         from theft_demo.web.app import create_app
 
+        class Server(uvicorn.Server):
+            def handle_exit(self, sig, frame):
+                rt.closing = True               # ends live-view streams at Ctrl+C, before uvicorn waits for them
+                super().handle_exit(sig, frame)
+
         print(f"Dashboard: http://localhost:{args.port}  (same network: http://<this-computer-ip>:{args.port})")
         try:
-            uvicorn.run(create_app(rt), host=args.host, port=args.port, log_level="warning",
-                        timeout_graceful_shutdown=2)
+            Server(uvicorn.Config(create_app(rt), host=args.host, port=args.port, log_level="warning",
+                                  timeout_graceful_shutdown=2)).run()
         except KeyboardInterrupt:
             pass
         rt.closing = True
