@@ -19,8 +19,10 @@ cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_
 
 verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, max_tokens: 8000, on_timeout: uncertain}   # current theft model; speed tuned later
 
-alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false, send_uncertain: true,
-           offline_notice_after_s: 120}
+alerts:   {language: hy, send_dismissed: false, send_uncertain: true, offline_notice_after_s: 120,
+           # early note: Telegram "suspicious smoke/fire, checking..." once the filter is at min_ratio (before the
+           # 0.8 alert filter), closed by the alert or an all-clear after clear_after_s; silent = no phone sound
+           early_note: {enabled: true, min_ratio: 0.6, clear_after_s: 15, silent: true}}
 
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
 

@@ -52,3 +52,9 @@ def test_timing_line():
     ev = SimpleNamespace(first_seen_t=18.2, t=21.4, trigger_time=100.0)
     assert timing(ev, now=104.5) == "⏱ YOLO 0:18.2 → alert 0:21.4 (+3.2 s) · sent +4.5 s"
     assert timing(SimpleNamespace(first_seen_t=None)) == ""
+
+
+def test_timing_line_with_early_note():
+    ev = SimpleNamespace(first_seen_t=8.4, early_t=10.0, t=18.4, trigger_time=100.0)
+    assert timing(ev, now=101.0, kind="early") == "⏱ YOLO 0:08.4 → note 0:10.0 (+1.6 s) · sent +1.0 s"
+    assert timing(ev, now=105.2) == "⏱ YOLO 0:08.4 → note 0:10.0 → alert 0:18.4 (+10.0 s) · sent +5.2 s"

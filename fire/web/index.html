@@ -142,15 +142,15 @@ button:disabled{opacity:.5;cursor:default}
   transition:transform .18s,box-shadow .18s,border-color .18s}
 .ev:hover{transform:translateY(-3px);box-shadow:0 14px 34px -12px rgba(0,0,0,.85);border-color:var(--line2)}
 .ev .rd{position:absolute;left:-25px;top:16px;width:12px;height:12px;border-radius:50%;background:var(--grey);box-shadow:0 0 0 4px #0F1318}
-.ev.checking .rd{background:var(--blue)}.ev.confirmed .rd{background:var(--accent)}.ev.possible .rd,.ev.unverified .rd{background:var(--amber)}
+.ev.checking .rd,.ev.watching .rd{background:var(--blue)}.ev.confirmed .rd{background:var(--accent)}.ev.possible .rd,.ev.unverified .rd{background:var(--amber)}
 .ev .top{display:flex;gap:12px}
 .ev .thumb{width:108px;height:61px;border-radius:8px;object-fit:cover;background:#07080A;flex:none;cursor:zoom-in;border:1px solid var(--line)}
 .ev .hd{min-width:0;flex:1}
 .tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-right:6px}
-.tag.checking{background:rgba(141,184,255,.14);color:var(--blue);animation:blink 1.4s ease-in-out infinite}
+.tag.checking,.tag.watching{background:rgba(141,184,255,.14);color:var(--blue);animation:blink 1.4s ease-in-out infinite}
 .tag.confirmed{background:rgba(255,107,44,.15);color:var(--accent-ink)}
 .tag.possible,.tag.unverified{background:rgba(255,176,46,.14);color:var(--amber)}
-.tag.dismissed{background:rgba(163,169,179,.1);color:var(--ink2)}
+.tag.dismissed,.tag.cleared{background:rgba(163,169,179,.1);color:var(--ink2)}
 @keyframes blink{50%{opacity:.45}}
 .ev .meta{font:12px var(--mono);color:var(--muted)}.ev .note{font-size:13px;color:var(--ink2);margin-top:4px}
 .reason{margin-top:10px;padding:9px 12px;border-radius:9px;background:rgba(255,255,255,.03)}
@@ -344,7 +344,9 @@ function toast(text){
 const isAcked = e => !!(e && e.acked);
 
 const STATE = {checking:["Checking…","AI is looking at it"], confirmed:["Fire confirmed",""], possible:["Possible fire",""],
-               dismissed:["Dismissed","false alarm, no alert sent"], unverified:["Alert (not verified)",""]};
+               dismissed:["Dismissed","false alarm, no alert sent"], unverified:["Alert (not verified)",""],
+               watching:["Suspicious, checking…","early note sent, waiting for confirmation"],
+               cleared:["All clear","not confirmed, all-clear sent"]};
 const CAMSTATE = {ok:["ok","Monitoring"], connecting:["wait","Connecting…"], offline:["bad","Camera offline"],
                   not_configured:["", "No camera"], ended:["", "Video ended"], stopped:["", "Stopped"],
                   ready:["", "Video ready"]};
@@ -547,9 +549,9 @@ function drawLive(){
           ${note ? `<div class=note>${esc(note)}</div>` : ""}</div>
       </div>
       ${e.reason ? `<div class=reason><div class=rl>${icon("sparkles")}AI reasoning</div><p>“${esc(e.reason)}”</p></div>` : ""}
-      ${f.clip || e.state !== "checking" ? `<div class=acts>
+      ${f.clip || !["checking", "watching"].includes(e.state) ? `<div class=acts>
         ${f.clip ? `<button data-clip=${e.n}>${icon("play")}${openEv.has(e.n) ? "Hide clip" : "Clip"}</button>` : ""}
-        ${e.state !== "checking" ? `<button data-fb=real data-n=${e.n} class="${e.feedback === "real" ? "on" : ""}">${icon("up")}Real</button>
+        ${!["checking", "watching"].includes(e.state) ? `<button data-fb=real data-n=${e.n} class="${e.feedback === "real" ? "on" : ""}">${icon("up")}Real</button>
         <button data-fb=false data-n=${e.n} class="${e.feedback === "false" ? "on" : ""}">${icon("down")}False alarm</button>` : ""}
       </div>` : ""}
       ${f.clip && openEv.has(e.n) ? `<video src="/files/${esc(f.clip)}" controls autoplay muted playsinline></video>` : ""}

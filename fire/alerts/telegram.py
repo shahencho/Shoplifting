@@ -31,6 +31,8 @@ TEXT = {
         "confirmed": "🔥 Fire confirmed", "still": "🔥 Fire still detected",
         "possible_uncertain": "⚠️ Possible fire (AI not sure)", "possible_unverified": "⚠️ Possible fire (not verified)",
         "upgrade": "🔥 Fire confirmed (was: possible fire)",
+        "early": "🟡 Suspicious {what}, checking…", "clear": "✅ Checked: not confirmed, false alarm, all clear",
+        "smoke": "smoke", "fire": "fire",
         "offline": "📷 Camera offline for {min} min", "online": "📷 Camera back online",
         "test": "✅ Test alert from the fire demo. Alerts will arrive here.",
         "linked": "✅ Linked as {name}. Fire alerts will arrive in this chat.", "unlinked": "Unlinked. No more alerts.",
@@ -39,6 +41,8 @@ TEXT = {
         "confirmed": "🔥 Հրդեհը հաստատված է", "still": "🔥 Հրդեհը դեռ հայտնաբերվում է",
         "possible_uncertain": "⚠️ Հնարավոր հրդեհ (ԱԲ-ն վստահ չէ)", "possible_unverified": "⚠️ Հնարավոր հրդեհ (չստուգված)",
         "upgrade": "🔥 Հրդեհը հաստատված է (նախկինում՝ հնարավոր հրդեհ)",
+        "early": "🟡 Կասկածելի {what}, ստուգում ենք…", "clear": "✅ Ստուգված է՝ չհաստատվեց, ամեն ինչ կարգին է",
+        "smoke": "ծուխ", "fire": "կրակ",
         "offline": "📷 Տեսախցիկն անջատված է {min} րոպե", "online": "📷 Տեսախցիկը կրկին միացված է",
         "test": "✅ Փորձնական ծանուցում։ Ահազանգերը կգան այստեղ։",
         "linked": "✅ Կապված է որպես {name}։ Հրդեհի ահազանգերը կգան այս զրույցում։",
@@ -62,12 +66,17 @@ def mmss(s: float) -> str:
     return f"{int(s // 60)}:{s % 60:04.1f}"
 
 
-def timing(ev, now: float | None = None) -> str:
-    """YOLO first saw it -> alert triggered (persistence filter) -> sent (clip + processing). Video time for
-    files, seconds since the stream started for cameras."""
+def timing(ev, now: float | None = None, kind: str = "alert") -> str:
+    """YOLO first saw it -> [early note ->] alert triggered (persistence filter) -> sent (clip + processing).
+    Video time for files, seconds since the stream started for cameras."""
     if getattr(ev, "first_seen_t", None) is None:
         return ""
-    line = f"⏱ YOLO {mmss(ev.first_seen_t)} → alert {mmss(ev.t)} (+{ev.t - ev.first_seen_t:.1f} s)"
+    early = getattr(ev, "early_t", None)
+    if kind == "early":
+        line = f"⏱ YOLO {mmss(ev.first_seen_t)} → note {mmss(early)} (+{early - ev.first_seen_t:.1f} s)"
+    else:
+        note = f" → note {mmss(early)}" if early is not None else ""
+        line = f"⏱ YOLO {mmss(ev.first_seen_t)}{note} → alert {mmss(ev.t)} (+{ev.t - ev.first_seen_t:.1f} s)"
     if ev.trigger_time:
         line += f" · sent +{(now or time.time()) - ev.trigger_time:.1f} s"
     return line
@@ -75,8 +84,9 @@ def timing(ev, now: float | None = None) -> str:
 
 class TelegramNotifier(Notifier):
     def __init__(self, token: str, *, language: str = "hy", camera="camera", state_path: Path = STATE,
-                 clock=None):
+                 clock=None, early_silent: bool = True):
         self.api = f"https://api.telegram.org/bot{token}/"
+        self.early_silent = early_silent    # early note + all clear without sound; alerts always buzz
         self.lang = language
         self.camera = camera
         self.state_path = state_path
@@ -136,11 +146,39 @@ class TelegramNotifier(Notifier):
             finally:
                 self.q.task_done()
 
+    def _reply(self, ev, chat: dict) -> dict:
+        """Alert / all-clear go under the early note, so the chat reads as one story."""
+        mid = ev.msg_ids.get(str(chat["id"])) if getattr(ev, "msg_ids", None) else None
+        return {"reply_to_message_id": mid, "allow_sending_without_reply": "true"} if mid else {}
+
     def _send(self, kind: str, ev, info: dict) -> None:
         t = TEXT.get(self.lang, TEXT["en"])
-        if kind in ("alert", "upgrade"):
+        cam = (self.camera() if callable(self.camera) else self.camera) if ev else ""   # current name
+        if kind == "early":
+            caption = f"{t['early'].format(what=t.get(ev.box.cls, ev.box.cls))}\n📷 {cam} · {self.clock(ev)}"
+            if timing(ev, kind="early"):
+                caption += f"\n{timing(ev, kind='early')}"
+            photo = ev.files.get("snapshot_path")
+            silent = {"disable_notification": "true"} if self.early_silent else {}
+            for chat in self.chats:
+                if photo and Path(photo).exists():
+                    with open(photo, "rb") as f:
+                        m = self._call("sendPhoto", data={"chat_id": chat["id"], "caption": caption[:1024], **silent},
+                                       files={"photo": f})
+                else:
+                    m = self._call("sendMessage", data={"chat_id": chat["id"], "text": caption, **silent})
+                ev.msg_ids[str(chat["id"])] = m.get("message_id")
+            print(f"[telegram] early E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
+        elif kind == "clear":
+            text = f"{t['clear']}\n📷 {cam} · {self.clock(ev)}"
+            if ev.reason:
+                text += f"\n{ev.reason}"
+            silent = {"disable_notification": "true"} if self.early_silent else {}
+            for chat in self.chats:
+                self._call("sendMessage", data={"chat_id": chat["id"], "text": text, **silent, **self._reply(ev, chat)})
+            print(f"[telegram] clear E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
+        elif kind in ("alert", "upgrade"):
             head = title(kind, ev, self.lang)
-            cam = self.camera() if callable(self.camera) else self.camera     # current name, set up after start
             caption = f"{head}\n📷 {cam} · {self.clock(ev)}"
             if timing(ev):
                 caption += f"\n{timing(ev)}"
@@ -149,14 +187,16 @@ class TelegramNotifier(Notifier):
             photo = ev.files.get("snapshot_path")
             clip = ev.files.get("clip_path")
             for chat in self.chats:
+                reply = self._reply(ev, chat)
                 if kind == "alert" and photo and Path(photo).exists():
                     with open(photo, "rb") as f:
-                        self._call("sendPhoto", data={"chat_id": chat["id"], "caption": caption[:1024]}, files={"photo": f})
+                        self._call("sendPhoto", data={"chat_id": chat["id"], "caption": caption[:1024], **reply},
+                                   files={"photo": f})
                 else:
-                    self._call("sendMessage", data={"chat_id": chat["id"], "text": caption})
+                    self._call("sendMessage", data={"chat_id": chat["id"], "text": caption, **reply})
                 if kind == "alert" and clip and Path(clip).exists():
                     with open(clip, "rb") as f:
-                        self._call("sendVideo", data={"chat_id": chat["id"], "supports_streaming": "true"},
+                        self._call("sendVideo", data={"chat_id": chat["id"], "supports_streaming": "true", **reply},
                                    files={"video": f})
             print(f"[telegram] {kind} E{ev.n} -> {len(self.chats)} chat(s)", flush=True)
         else:
@@ -222,7 +262,8 @@ def from_env(cfg: dict, camera="camera", clock=None) -> TelegramNotifier | None:
     if not token:
         print("[telegram] TELEGRAM_BOT_TOKEN not set in fire/.env: alerts are only logged", flush=True)
         return None
-    return TelegramNotifier(token, language=cfg["alerts"].get("language", "hy"), camera=camera, clock=clock)
+    return TelegramNotifier(token, language=cfg["alerts"].get("language", "hy"), camera=camera, clock=clock,
+                            early_silent=(cfg["alerts"].get("early_note") or {}).get("silent", True))
 
 
 def main() -> None:

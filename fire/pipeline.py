@@ -94,8 +94,15 @@ class Pipeline:
         with self.lock:
             self._collect_verdicts(t)
             self._finish_clips(t)
+            if notice := self.em.poll(t):
+                self.log(f"[E{notice.event.n}] t={t:.1f}s all clear: not confirmed within "
+                         f"{self.em.clear_after_s:.0f} s")
+                self.save_event(notice.event)
+                self._send(notice)
             act = self.em.on_check(t, idx, p, boxes)
-            if act:
+            if act and act.purpose == "early":
+                self._early_note(act.event, frame, t, boxes)
+            elif act:
                 self._ask(act, frame, t, boxes, p)
         self.stats["checks"] += 1
         self.stats["t"] = round(t, 2)
@@ -112,7 +119,19 @@ class Pipeline:
             self._collect_verdicts(t, final=True)
             self._finish_clips(t, final=True)
 
-    # --- evidence + Qwen ---
+    # --- early note, evidence + Qwen ---
+
+    def _early_note(self, ev: Event, frame: np.ndarray, t: float, boxes: list[Box]) -> None:
+        """Filter at the early ratio: photo now, no Qwen, no clip. The alert or the all-clear follows."""
+        ev.wall_time = self.clock() if self.clock else ""
+        ev.trigger_time = time.time()
+        ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
+        d = self.out_dir / "events" / f"E{ev.n:03d}"
+        d.mkdir(parents=True, exist_ok=True)
+        (d / "early.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))
+        ev.files.update({"snapshot": f"events/E{ev.n:03d}/early.jpg", "snapshot_path": str(d / "early.jpg")})
+        self.log(f"[E{ev.n}] t={t:.1f}s early note: {ev.box.cls} {ev.box.conf:.2f}, ratio {ev.ratio:.2f} -> Watching")
+        self._send(Notice("early", ev))
 
     def _ask(self, act: Action, frame: np.ndarray, t: float, boxes: list[Box], p: Persist) -> None:
         ev = act.event
@@ -122,7 +141,8 @@ class Pipeline:
         if act.purpose == "initial":
             ev.wall_time = self.clock() if self.clock else ""
             ev.trigger_time = time.time()
-            ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
+            if ev.first_seen_t is None:         # kept from the early note, if there was one
+                ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
             d = self.out_dir / "events" / f"E{ev.n:03d}"
             d.mkdir(parents=True, exist_ok=True)
             (d / "snapshot.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))

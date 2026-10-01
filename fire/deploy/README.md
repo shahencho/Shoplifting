@@ -66,6 +66,8 @@ Event folders older than 14 days are deleted daily (`/etc/cron.daily/fire-demo-c
 - **Qwen is off** (`--no-qwen` in `ecosystem.config.js`): YOLO + the 3 s filter alone decide. Every event goes to
   Telegram as "Possible fire (not verified)" with photo, clip and a timing line
   (`⏱ YOLO <first seen> → alert <trigger> (+s) · sent +s`). Remove `--no-qwen` and deploy to turn Qwen back on.
+- **Early note** (`alerts.early_note` in `config.yaml`): at 60% of checks over 3 s a silent
+  "🟡 Suspicious smoke/fire, checking…" with photo; the alert or "✅ all clear" (after 15 s) follows as a reply.
 - **Video files never play by themselves.** After a start, deploy or camera save the dashboard shows "Video ready";
   it plays only on **Play / Replay from the start**. Live cameras start at once.
 - **AV1 videos** (most YouTube downloads) don't decode here: convert them first:

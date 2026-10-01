@@ -216,7 +216,7 @@ class Runtime:
             "offline_s": round(time.monotonic() - s.offline_since) if s and s.offline_since else 0,
             "counters": {"events": len(evs), "alerts": sum(e.state in ALERT_STATES for e in evs),
                          "confirmed": sum(e.state == "confirmed" for e in evs),
-                         "dismissed": sum(e.state == "dismissed" for e in evs)},
+                         "dismissed": sum(e.state in ("dismissed", "cleared") for e in evs)},
             "detections": self.enabled, "setup_done": bool(self.settings.get("setup_done")),
             "demo": bool(self.demo_url) and self.source == self.demo_url,
             "file": bool(self.source) and is_file(self.source),

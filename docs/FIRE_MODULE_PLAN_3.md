@@ -104,7 +104,7 @@ Camera ──RTSP──► stream.py (latest frame + last 10 s buffer)
 
 | Topic | Rule | Why |
 |---|---|---|
-| **Precheck message** | Off by default (`instant_precheck_message: false`). The "Checking…" state is shown on the dashboard only. | The client's phone buzzes only for real or possible fire, never for a red jacket. |
+| **Early note** (changed 01.10) | On (`alerts.early_note`): at ≥ 60% of checks over 3 s, a **silent** Telegram "🟡 Suspicious smoke/fire, checking…" with photo, no Qwen. Closed by the alert (as a reply) or by "✅ all clear" if the 80% filter doesn't pass within 15 s or Qwen says NORMAL. One per incident, none during the alert cooldown, none in a cleared area for 60 s. | Measured on BJ9ng9L1CA0: smoke is detected in ~2 s bursts, so the 80% filter waits for the flames (alert ~16–18 s vs ~10 s at 60%). The note shows the early detection; the phone only buzzes for the alert. |
 | **Qwen timeout / error** | After `timeout_s` or any API error → treat as **UNCERTAIN** → send "Possible fire (not verified)" | For fire, a missed alert is worse than an unverified one. For now `timeout_s` is long (180 s) because the current model is slow; it is shortened once a model is chosen (§11). |
 | **UNCERTAIN** | Alert is sent, labelled **"Possible fire"**, not "Fire confirmed" | Don't overstate what the AI said. |
 | **Cooldown after an alert** | 60 s for the **whole camera**. Two exceptions: (1) a "Possible fire" event may be **upgraded** to "Fire confirmed" during the cooldown (the detector keeps running and Qwen is asked again at most every 15 s while the fire is still there); (2) if fire is still detected after the cooldown, it goes through Qwen again and the alert is sent as **"Fire still detected"**. | One fire = one alert, not one per box, but a growing fire is never silenced and a burning one is re-announced once a minute. |
@@ -256,7 +256,8 @@ temporal: {window_s: 3, min_ratio: 0.8, iou: 0.3, checks_per_s: 5}   # frame ski
 cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15,
            after_dismissed_s: 60, dismissed_scope: area}
 verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, on_timeout: uncertain}   # current theft model for now; tuned later
-alerts:   {language: hy, instant_precheck_message: false, send_dismissed: false, send_uncertain: true}
+alerts:   {language: hy, send_dismissed: false, send_uncertain: true,
+           early_note: {enabled: true, min_ratio: 0.6, clear_after_s: 15, silent: true}}
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
 stream:   {prefer_substream: true, demo_camera: {name: "Yerevan, Orbeli str.", url: "https://www.youtube.com/watch?v=BQY5LAmDEVM"}}
 ```

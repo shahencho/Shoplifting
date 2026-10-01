@@ -45,13 +45,15 @@ def _cfg():
     return copy.deepcopy(yaml.safe_load((FIRE / "config.yaml").read_text(encoding="utf-8")))
 
 
-def _run(tmp_path, verdicts, fire_from_s=2.0):
-    _video(tmp_path / "v.mp4")
+def _run(tmp_path, verdicts, fire_from_s=2.0, early=False, fire_until_s=99.0):
+    _video(tmp_path / "v.mp4", seconds=25)
     rec, ver = Recorder(), FakeVerifier(verdicts)
+    cfg = _cfg()
+    cfg["alerts"]["early_note"]["enabled"] = early
     stream = Stream(str(tmp_path / "v.mp4"), buffer_s=10, buffer_fps=10)
-    pipe = Pipeline(_cfg(), stream, verifier=ver, notifier=rec, out_dir=tmp_path / "out", simulate_latency=True,
+    pipe = Pipeline(cfg, stream, verifier=ver, notifier=rec, out_dir=tmp_path / "out", simulate_latency=True,
                     log=lambda m: None)
-    pipe.run(boxes_for=lambda idx: [BOX] if idx / 30 >= fire_from_s else [])
+    pipe.run(boxes_for=lambda idx: [BOX] if fire_from_s <= idx / 30 < fire_until_s else [])
     return pipe, rec, ver
 
 
@@ -68,7 +70,7 @@ def test_confirmed_alert_waits_for_clip_and_has_evidence(tmp_path):
     cap = cv2.VideoCapture(str(d / "clip.mp4"))
     played_s = cap.get(cv2.CAP_PROP_FRAME_COUNT) / cap.get(cv2.CAP_PROP_FPS)
     assert abs(played_s - ev.files["clip_s"]) < 0.5                 # plays in real time, not sped up
-    assert len(pipe.events) == 1                                    # 20 s video, 60 s cooldown
+    assert len(pipe.events) == 1                                    # 25 s video, 60 s cooldown
 
 
 def test_dismissed_sends_nothing(tmp_path):
@@ -90,3 +92,24 @@ def test_event_records_when_yolo_first_saw_it(tmp_path):
     ev = pipe.events[0]
     assert abs(ev.first_seen_t - 2.0) < 0.25                        # first box at 2 s
     assert ev.t - ev.first_seen_t >= 2.0 and ev.trigger_time > 0     # >= 80% of the 3 s window
+
+
+def test_early_note_then_alert_on_the_same_event(tmp_path):
+    pipe, rec, _ = _run(tmp_path, ["CONFIRMED"], early=True)
+    ev = pipe.events[0]
+    assert len(pipe.events) == 1 and ev.state == "confirmed"
+    assert rec.sent == [("early", 1, "watching", False), ("alert", 1, "confirmed", True)]
+    assert ev.first_seen_t <= ev.early_t < ev.t                     # seen -> early note (60%) -> alert (80%)
+    assert (tmp_path / "out" / "events" / "E001" / "early.jpg").stat().st_size > 0
+
+
+def test_early_note_cleared_when_it_never_reaches_the_alert_filter(tmp_path):
+    pipe, rec, ver = _run(tmp_path, [], early=True, fire_until_s=4.0)  # a 2 s burst: 60% yes, 80% never
+    ev = pipe.events[0]
+    assert rec.sent == [("early", 1, "watching", False), ("clear", 1, "cleared", False)]
+    assert ev.state == "cleared" and abs(ev.verdict_t - ev.early_t - 15) < 0.3 and ver.calls == []
+
+
+def test_early_note_cleared_when_qwen_says_normal(tmp_path):
+    pipe, rec, _ = _run(tmp_path, ["NORMAL"], early=True)
+    assert rec.sent == [("early", 1, "watching", False), ("clear", 1, "dismissed", False)]
