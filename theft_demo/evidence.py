@@ -100,19 +100,36 @@ def to_h264(path: Path) -> bool:
     return False
 
 
-def write_clip(frames: list[tuple[float, bytes]], path: Path, fps: float, max_h: int = 720) -> bool:
-    """JPEG frames -> H.264 mp4 (plays in browsers and Telegram)."""
+def _img(frame: bytes | np.ndarray) -> np.ndarray:
+    return frame if isinstance(frame, np.ndarray) else cv2.imdecode(np.frombuffer(frame, np.uint8), cv2.IMREAD_COLOR)
+
+
+def write_clip(frames: list[tuple[float, bytes | np.ndarray]], path: Path, fps: float, max_h: int = 720) -> bool:
+    """JPEG (or decoded) frames -> H.264 mp4 (plays in browsers and Telegram)."""
     if not frames:
         return False
-    first = cv2.imdecode(np.frombuffer(frames[0][1], np.uint8), cv2.IMREAD_COLOR)
+    first = _img(frames[0][1])
     h, w = first.shape[:2]
     s = min(1.0, max_h / h)
     size = (int(w * s) // 2 * 2, int(h * s) // 2 * 2)
     wr, cc = open_writer(path, fps, size)
-    for _, jpg in frames:
-        img = cv2.imdecode(np.frombuffer(jpg, np.uint8), cv2.IMREAD_COLOR)
+    for _, frame in frames:
+        img = _img(frame)
         wr.write(cv2.resize(img, size) if (img.shape[1], img.shape[0]) != size else img)
     wr.release()
     if cc == "mp4v":
         to_h264(path)
     return path.exists() and path.stat().st_size > 0
+
+
+def read_clip(path: Path, t0: float, fps: float) -> list[tuple[float, np.ndarray]]:
+    """A written clip's frames with their video times (t0 + i / fps), to join clips."""
+    cap = cv2.VideoCapture(str(path))
+    out: list[tuple[float, np.ndarray]] = []
+    while True:
+        ok, img = cap.read()
+        if not ok:
+            break
+        out.append((t0 + len(out) / fps, img))
+    cap.release()
+    return out

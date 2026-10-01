@@ -508,7 +508,7 @@ function drawBanner(){
   if (el.dataset.sig === sig) return;
   el.dataset.sig = sig;
   if (!e){ el.innerHTML = ""; return; }
-  const conf = e.state === "confirmed", clip = (e.files || {}).clip, tm = e.timing || {};
+  const conf = e.state === "confirmed", clip = (e.files || {}).evidence || (e.files || {}).clip, tm = e.timing || {};
   const alerted = e.sent.some(k => k === "alert" || k === "upgrade");
   const head = conf ? "LIKELY THEFT" : e.verdict === "UNCERTAIN" ? "POSSIBLE THEFT" : "POSSIBLE THEFT (NOT VERIFIED)";
   const sent = !alerted ? "Same incident: already alerted"
@@ -542,7 +542,7 @@ function drawLive(){
   box.innerHTML = S.events.map(e => {
     let [title, note] = STATE[e.state] || [e.state, ""];
     if (e.state === "possible") note = e.verdict === "UNCERTAIN" ? "AI not sure" : "not verified (AI timeout / error)";
-    const tg = e.sent.length ? "Telegram: " + e.sent.map(k => ({early:"silent note", alert:"alert", upgrade:"upgrade", clear:"all clear"})[k] || k).join(", ")
+    const tg = e.sent.length ? "Telegram: " + e.sent.map(k => ({early:"silent note", alert:"alert", upgrade:"upgrade", evidence:"clip updated", clear:"all clear"})[k] || k).join(", ")
              : "dashboard only (same incident)";
     note = [note, tg].filter(Boolean).join(" · ");
     const f = e.files || {}, tm = e.timing || {};
@@ -586,7 +586,7 @@ document.addEventListener("click", async ev => {
     await api(`/api/events/${t.dataset.n}/feedback`, {value: v}); await refresh();
     if (v) toast(v === "real" ? "Marked as real" : "Marked as false alarm"); }
   if (t.dataset.bclip){ const e = S.events.find(x => x.n === +t.dataset.bclip);
-    if (e && e.files.clip){ $("#clipvid").src = "/files/" + e.files.clip; $("#clipmeta").textContent = `${S.status.camera || ""} · ${evTime(e)}`;
+    if (e && (e.files.evidence || e.files.clip)){ $("#clipvid").src = "/files/" + (e.files.evidence || e.files.clip); $("#clipmeta").textContent = `${S.status.camera || ""} · ${evTime(e)}`;
       $("#clipdlg").showModal(); $("#clipvid").play().catch(() => {}); } }
   if (t.dataset.zoom !== undefined && t.src){ $("#zoom img").src = t.src; $("#zoom").showModal(); }
   if (t.id === "zoom" || t.closest("#zoom")) $("#zoom").close();

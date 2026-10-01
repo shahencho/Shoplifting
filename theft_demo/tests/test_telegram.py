@@ -106,3 +106,24 @@ def test_new_bot_token_resets_linked_chats_and_offset(tmp_path):
     tg = Fresh(path)
     assert tg.chats == [] and tg.state["offset"] == 0 and tg.state["bot"] == "TheftBot"
     assert json.loads(path.read_text(encoding="utf-8"))["bot"] == "TheftBot"
+
+
+def test_evidence_replaces_the_main_evidence_video_in_place(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", [{"id": 5, "name": "@a"}, {"id": 6, "name": "@b"}])
+    c = check()
+    for name in ("snapshot.jpg", "clip.mp4", "evidence.mp4"):
+        (tmp_path / name).write_bytes(b"x")
+    c.files.update({"snapshot_path": str(tmp_path / "snapshot.jpg"), "clip_path": str(tmp_path / "clip.mp4")})
+    c.state, c.verdict, c.reason, c.qwen_s = "confirmed", "CONFIRMED", "item into the pocket", 40.0
+    c.alert_time = time.time()
+    tg.notify("alert", c)
+    tg.flush()
+    video_id = c.video_ids["5"]
+    del c.video_ids["6"]                          # @b linked after the alert: has no video to replace
+    tg.notify("evidence", c, evidence_path=str(tmp_path / "evidence.mp4"))
+    tg.flush()
+    edit = tg.sent("editMessageMedia")
+    assert len(edit) == 1 and edit[0]["chat_id"] == 5 and edit[0]["message_id"] == video_id
+    media = json.loads(edit[0]["media"])
+    assert media["type"] == "video" and media["caption"] == "🎥 Main evidence" and media["media"] == "attach://clip"
+    assert tg.sent("sendVideo")[-1]["chat_id"] == 6 and "6" in c.video_ids

@@ -112,3 +112,27 @@ def test_timing_from_the_act():
     c.alert_time = 1033.0
     tm = c.timing()
     assert tm["act_to_check_s"] == 2.0 and tm["qwen_s"] == 30.0 and tm["act_to_alert_s"] == 35.0
+
+
+def test_later_theft_checks_of_the_alerted_person_extend_the_evidence():
+    em = EventManager(join_s=20, after_alert_s=30)
+    c1, _ = check(em, 33, 36)
+    c2, _ = check(em, 33, 42)                    # same person, same incident (verdicts arrive later)
+    c3, _ = check(em, 7, 44)
+    c4, _ = check(em, 33, 49)
+    assert em.on_verdict(c1, v("CONFIRMED"), 110).kind == "alert"
+    n2 = em.on_verdict(c2, v("CONFIRMED"), 150)
+    assert n2.kind == "evidence" and n2.extend
+    assert em.on_verdict(c3, v("CONFIRMED"), 155) is None        # another person: dashboard only
+    assert em.on_verdict(c4, v("NORMAL"), 160) is None           # normal: nothing to add
+    assert em.incidents[0].evidence == [c1, c2]
+    assert c1.video_ids is c2.video_ids                           # the one evidence video to replace
+
+
+def test_upgrade_by_the_alerted_person_also_extends_the_evidence():
+    em = EventManager(join_s=20, after_alert_s=30)
+    c1, _ = check(em, 5, 10)
+    c2, _ = check(em, 5, 16)
+    assert em.on_verdict(c1, v("UNCERTAIN"), 40).kind == "alert"
+    n = em.on_verdict(c2, v("CONFIRMED"), 45)
+    assert n.kind == "upgrade" and n.extend

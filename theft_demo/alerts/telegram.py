@@ -240,13 +240,37 @@ class TelegramNotifier(Notifier):
                     self._call("sendMessage", data={"chat_id": chat["id"], "text": caption, **reply})
                 if kind == "alert" and clip and Path(clip).exists():
                     with open(clip, "rb") as f:
-                        self._call("sendVideo", data={"chat_id": chat["id"], "caption": t["clip"],
-                                                      "supports_streaming": "true", **reply}, files={"video": f})
+                        m = self._call("sendVideo", data={"chat_id": chat["id"], "caption": t["clip"],
+                                                          "supports_streaming": "true", **reply}, files={"video": f})
+                    ev.video_ids[str(chat["id"])] = m.get("message_id")
             print(f"[telegram] {kind} E{ev.n} -> {self._each(kind, send)} chat(s)", flush=True)
+            if kind == "upgrade" and info.get("evidence_path"):
+                self._update_clip(ev, info["evidence_path"], t)
+        elif kind == "evidence":
+            self._update_clip(ev, info.get("evidence_path"), t)
         else:
             text = t.get(kind, kind).format(**info)
             n = self._each(kind, lambda chat: self._call("sendMessage", data={"chat_id": chat["id"], "text": text}))
             print(f"[telegram] {kind} -> {n} chat(s)", flush=True)
+
+    def _update_clip(self, ev, path: str | None, t: dict) -> None:
+        """A later check of the alerted person: replace the "Main evidence" video in place with the joined clip
+        (no new message); a chat without that video (e.g. linked later) gets it as a reply to the note."""
+        if not path or not Path(path).exists():
+            return
+        def send(chat):
+            vid = ev.video_ids.get(str(chat["id"]))
+            with open(path, "rb") as f:
+                if vid:
+                    media = {"type": "video", "media": "attach://clip", "caption": t["clip"], "supports_streaming": True}
+                    self._call("editMessageMedia", data={"chat_id": chat["id"], "message_id": vid,
+                                                         "media": json.dumps(media, ensure_ascii=False)}, files={"clip": f})
+                else:
+                    m = self._call("sendVideo", data={"chat_id": chat["id"], "caption": t["clip"],
+                                                      "supports_streaming": "true", **self._reply(ev, chat)},
+                                   files={"video": f})
+                    ev.video_ids[str(chat["id"])] = m.get("message_id")
+        print(f"[telegram] evidence E{ev.n} -> {self._each('evidence', send)} chat(s)", flush=True)
 
     # --- linking ---
 

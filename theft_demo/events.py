@@ -9,7 +9,10 @@ Incident = what Telegram sees: one silent note, then one reply.
       a person who already has a check in an open incident (one person = one note / alert).
     - The first check of an incident that comes back confirmed or possible -> one alert (reply to the note),
       incident "alerted", camera cooldown after_alert_s.
-    - In an alerted incident: possible -> a later confirmed sends one "upgrade"; anything else is dashboard only.
+    - In an alerted incident: possible -> a later confirmed sends one "upgrade". A later confirmed / possible check of
+      the alerted person extends the evidence: its clip is joined to the alert's clip and the "Main evidence" video
+      in Telegram is replaced in place ("evidence"; an upgrade by that person does it too). One activity is cut into
+      several checks, and the act itself is often in a later one. Anything else is dashboard only.
     - Every check of an open incident dismissed, and its join window over (no check can join any more) -> one
       silent "all clear" (reply to the note), incident "cleared". poll(t) sends it if the last answer came early.
     - During the cooldown no incident opens: new checks join the alerted incident (dashboard only, upgrade allowed).
@@ -53,6 +56,7 @@ class Check:
     trigger_time: float = 0.0                          # epoch seconds when the check started
     alert_time: float = 0.0                            # epoch seconds when its alert / upgrade was handed to Telegram
     msg_ids: dict = field(default_factory=dict)        # shared with the incident: chat id -> note message id
+    video_ids: dict = field(default_factory=dict)      # shared with the incident: chat id -> evidence video message id
 
     def timing(self) -> dict:
         """Seconds from the act (last cue) to: the check start / note, the verdict, the alert.
@@ -70,6 +74,7 @@ class Check:
     def to_dict(self) -> dict:
         d = asdict(self)
         d.pop("msg_ids")
+        d.pop("video_ids")
         d["timing"] = self.timing()
         return d
 
@@ -81,14 +86,17 @@ class Incident:
     checks: list[Check] = field(default_factory=list)
     state: str = "open"             # open / alerted / cleared
     alert: Check | None = None      # the check whose alert (or upgrade) was sent
+    evidence: list[Check] = field(default_factory=list)    # the alerted person's theft checks: their clips, joined
     msg_ids: dict = field(default_factory=dict)
+    video_ids: dict = field(default_factory=dict)
 
 
 @dataclass
 class Notice:
-    kind: str                       # early / alert / upgrade / clear
+    kind: str                       # early / alert / upgrade / evidence / clear
     check: Check
     incident: Incident
+    extend: bool = False            # the check's clip joins the incident's evidence video (always for "evidence")
 
 
 class EventManager:
@@ -131,6 +139,7 @@ class EventManager:
         c = Check(len(self.checks) + 1, ev.tid, inc.n, round(t, 2), round(ev.t, 2), round(end, 2), list(ev.reasons),
                   bool(ev.strong), frame_idxs, crop, opened_note=note)
         c.msg_ids = inc.msg_ids                      # same dict: replies to the incident's note
+        c.video_ids = inc.video_ids                  # same dict: the evidence video to replace
         inc.checks.append(c)
         self.checks.append(c)
         return c, (Notice("early", c, inc) if note and self.early_note else None)
@@ -161,15 +170,19 @@ class EventManager:
         inc = self.incidents[c.incident - 1]
         if inc.state == "open":
             if c.state in ALERT_STATES:
-                inc.state, inc.alert = "alerted", c
+                inc.state, inc.alert, inc.evidence = "alerted", c, [c]
                 self.cooldown_until = t + self.after_alert_s
                 return Notice("alert", c, inc)
             return self._clear(inc, t)
-        if inc.state == "alerted" and self.allow_upgrade and c.state == "confirmed" \
-                and inc.alert is not None and inc.alert.state == "possible":
+        if inc.state != "alerted" or c.state not in ALERT_STATES:
+            return None
+        extend = bool(inc.evidence) and c.tid == inc.evidence[0].tid
+        if extend:
+            inc.evidence.append(c)
+        if self.allow_upgrade and c.state == "confirmed" and inc.alert is not None and inc.alert.state == "possible":
             inc.alert = c
-            return Notice("upgrade", c, inc)
-        return None
+            return Notice("upgrade", c, inc, extend=extend)
+        return Notice("evidence", c, inc, extend=True) if extend else None
 
     def poll(self, t: float) -> list[Notice]:
         """All clear for open incidents whose checks are all dismissed once the join window is over

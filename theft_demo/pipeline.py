@@ -7,7 +7,8 @@ YOLO is precomputed (theft_demo/precompute.py) and replayed frame by frame: the 
 pose at the trigger's 10 checks per second. Everything after YOLO runs live.
 
 Per check, in <out_dir>/events/E001/: snapshot.jpg (the whole frame, the person highlighted), qwen.jpg (the 5
-crops Qwen saw), clip.mp4 (episode start - before_s ... check start + after_s), event.json.
+crops Qwen saw), clip.mp4 (episode start - before_s ... check start + after_s), event.json; evidence.mp4 when a
+later check of the alerted person extends the alert's clip (the clips joined, at most evidence.max_s).
 <out_dir>/events.jsonl gets a line on every state change; <out_dir>/timing.md is written at the end.
 """
 from __future__ import annotations
@@ -24,8 +25,8 @@ from typing import Callable
 import numpy as np
 
 from theft_demo.alerts import Notifier
-from theft_demo.events import ALERT_STATES, Check, EventManager, Notice
-from theft_demo.evidence import draw_people, jpeg, resize_max_side, strip, write_clip
+from theft_demo.events import ALERT_STATES, Check, EventManager, Incident, Notice
+from theft_demo.evidence import draw_people, jpeg, read_clip, resize_max_side, strip, write_clip
 from theft_demo.stream import Stream
 from theft_demo.trigger import TriggerFilter, crop_box, select_frames
 
@@ -53,7 +54,7 @@ class Pipeline:
         self.em = EventManager.from_config(cfg)
         self.k, self.pad, self.kp_conf = tc["clip_frames"], tc["crop_padding"], tc.get("keypoint_conf", 0.3)
         self.max_side, self.quality = vc.get("max_side", 640), vc.get("jpeg_quality", 85)
-        self.before_s, self.after_s = ec["before_s"], ec["after_s"]
+        self.before_s, self.after_s, self.evidence_max_s = ec["before_s"], ec["after_s"], ec.get("max_s", 45)
         # raw frames kept for the crops: an episode is at most episode_max_seconds + margins, closed gap_s later
         self.keep_s = tc["buffer_seconds"] + tc.get("episode_max_seconds", 6) + tc.get("episode_gap_seconds", 2) + 2
         self._recent: deque[tuple[int, np.ndarray]] = deque()
@@ -186,7 +187,8 @@ class Pipeline:
                      f"-> {c.state}: {v.reason[:160]}")
             self.save_event(c)
             if notice:
-                if notice.kind == "alert" and "clip" not in c.files and any(x is c for x, _, _ in self._clips):
+                needs_clip = notice.kind == "alert" or notice.extend
+                if needs_clip and "clip" not in c.files and any(x is c for x, _, _ in self._clips):
                     self._waiting.append(notice)       # sent as soon as the clip is written
                 else:
                     self._send(notice)
@@ -204,7 +206,7 @@ class Pipeline:
             fps = (len(frames) - 1) / span if span > 0 else self.stream.buffer_fps
             if write_clip(frames, path, fps):
                 c.files.update({"clip": f"events/E{c.n:03d}/clip.mp4", "clip_path": str(path),
-                                "clip_s": round(span, 1)})
+                                "clip_s": round(span, 1), "clip_t0": round(frames[0][0], 3), "clip_fps": round(fps, 3)})
             self.save_event(c)
             for n in [n for n in self._waiting if n.check is c]:
                 self._waiting.remove(n)
@@ -215,8 +217,35 @@ class Pipeline:
         c.sent.append(notice.kind)
         if notice.kind in ("alert", "upgrade"):
             c.alert_time = time.time()
-        self.notifier.notify(notice.kind, c, incident=notice.incident.n)
+        info = {"incident": notice.incident.n}
+        if notice.extend and (path := self._evidence_clip(notice.incident, c)):
+            info["evidence_path"] = str(path)
+        self.notifier.notify(notice.kind, c, **info)
         self.save_event(c)
+
+    def _evidence_clip(self, inc: Incident, c: Check) -> Path | None:
+        """The alerted person's theft clips joined in time order (overlaps once), the last evidence.max_s of it.
+        One activity is cut into several checks, and the act itself is often in a later one."""
+        clips = sorted((x for x in inc.evidence if "clip_t0" in x.files), key=lambda x: x.files["clip_t0"])
+        frames: list = []
+        for x in clips:
+            last = frames[-1][0] if frames else float("-inf")
+            frames += [f for f in read_clip(Path(x.files["clip_path"]), x.files["clip_t0"], x.files["clip_fps"])
+                       if f[0] > last + 1e-3]
+        if len(clips) < 2 or not frames:
+            return None
+        frames = [f for f in frames if f[0] >= frames[-1][0] - self.evidence_max_s]
+        rel = f"events/E{c.n:03d}/evidence.mp4"
+        path = self.out_dir / rel
+        if not write_clip(frames, path, statistics.median(x.files["clip_fps"] for x in clips)):
+            return None
+        for x in inc.evidence:                      # the dashboard banner plays it too
+            x.files["evidence"] = rel
+            if x is not c:
+                self.save_event(x)
+        self.log(f"[E{c.n}] evidence: E{', E'.join(str(x.n) for x in clips)} joined, "
+                 f"{frames[0][0]:.1f}-{frames[-1][0]:.1f}s -> {rel}")
+        return path
 
     def save_event(self, c: Check) -> None:
         d = c.to_dict()

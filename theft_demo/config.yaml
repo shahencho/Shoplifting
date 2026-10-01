@@ -41,6 +41,7 @@ cooldown: {after_alert_s: 30, allow_upgrade: true}  # after an alert: no new inc
 
 alerts: {language: hy, early_note: {enabled: true, silent: true}}
 
-evidence: {before_s: 2, after_s: 2}   # clip = episode start - before_s ... check start + after_s
+evidence: {before_s: 2, after_s: 2, max_s: 45}   # clip = episode start - before_s ... check start + after_s;
+                                              # max_s: longest joined evidence clip (later checks of the alerted person)
 
 stream: {buffer_s: 15, buffer_fps: 10}

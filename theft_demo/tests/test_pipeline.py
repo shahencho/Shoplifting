@@ -130,3 +130,39 @@ def test_stop_while_waiting_for_qwen_after_the_video_ends(tmp_path):
     th.join(timeout=2)
     assert not th.is_alive(), "Ctrl+C must not wait for Qwen (timeout_s)"
     assert (tmp_path / "out" / "timing.md").exists()
+
+
+class LateVerifier(FakeVerifier):
+    """Qwen answers only once every check has started (the alert's verdict arrives after the next check began)."""
+
+    def __init__(self, verdicts, n):
+        super().__init__(verdicts)
+        self.n, self.pending = n, []
+
+    def submit(self, frames):
+        self.calls.append(len(frames))
+        f = Future()
+        self.pending.append(f)
+        if len(self.pending) == self.n:
+            for p in self.pending:
+                p.set_result(Verdict(self.verdicts.pop(0), 85, "takes the lamp", "", 1.5, cost_usd=0.001))
+        return f
+
+
+def test_later_check_of_the_alerted_person_extends_the_evidence_clip(tmp_path):
+    _video(tmp_path / "v.mp4")
+    cfg = copy.deepcopy(yaml.safe_load((DEMO / "config.yaml").read_text(encoding="utf-8")))
+    rec, ver = Recorder(), LateVerifier(["CONFIRMED", "CONFIRMED"], 2)
+    pipe = Pipeline(cfg, Stream(str(tmp_path / "v.mp4"), buffer_s=15, buffer_fps=10), _tracks(), verifier=ver,
+                    notifier=rec, out_dir=tmp_path / "out", log=lambda m: None)
+    pipe.trigger = FakeTrigger([(1, 2.0, 3.0, 5.0), (1, 6.0, 8.0, 10.0)])
+    pipe.run()
+    assert [s[0] for s in rec.sent] == ["early", "alert", "evidence"]
+    c1, c2 = pipe.events
+    ev = tmp_path / "out" / c2.files["evidence"]
+    assert ev.stat().st_size > 0 and c1.files["evidence"] == c2.files["evidence"]
+    cap = cv2.VideoCapture(str(ev))
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    span = c2.files["clip_t0"] + c2.files["clip_s"] - c1.files["clip_t0"]
+    assert n >= 0.9 * span * c1.files["clip_fps"], "the joined clip covers both checks"
