@@ -34,6 +34,9 @@ def main() -> None:
             shutil.copy2(src, dst)
             print(f"{v['id']}: copied from {v['source']}")
             continue
+        if not v.get("url"):
+            print(f"{v['id']}: no source or URL (e.g. UCF-Crime): copy {dst.name} into theft_demo/data/ by hand")
+            continue
         print(f"{v['id']}: downloading {v['url']}")
         subprocess.run([sys.executable, "-m", "yt_dlp", "-S", "res:360", "-f", "bv*[ext=mp4][vcodec^=avc1]/b[ext=mp4]",
                         "-o", str(DATA / "%(id)s.%(ext)s"), v["url"]], check=True)

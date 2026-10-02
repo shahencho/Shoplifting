@@ -6,6 +6,7 @@ __pycache__/
 *.pt
 data/*
 !data/videos.csv
+!data/labels.csv
 outputs/
 .env
 state/

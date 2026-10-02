@@ -1,5 +1,6 @@
 """Frozen copy of src/trigger.py (theft pipeline, branch main @ 3658a44) + crop_box / select_frames from
-src/pipeline.py. The demo runs trigger_mode: episode.
+src/pipeline.py. The demo runs trigger_mode: episode. Demo-only addition: pocket_frames (extra keyframes
+around the hand-to-body moment, see _pocket_keyframes); src/ doesn't have it.
 
 Layers 2-3: per-person 5 s buffer + the Paza trigger filter.
 
@@ -40,6 +41,8 @@ from theft_demo.perception import L_HIP, L_SHOULDER, L_WRIST, R_HIP, R_SHOULDER,
 
 MIN_KEYFRAME_GAP_S = 0.3   # episode keyframes closer than this are near-duplicates
 BURST_GAP_S = 0.25         # cues closer than this are one continuous movement (a burst)
+POCKET_LEAD_S = 0.5        # pocket keyframes start this long before the hand-to-body movement (item still in hand)
+POCKET_GAP_S = 0.2         # pocket keyframes closer than this to a chosen keyframe are skipped
 
 TORSO = (L_SHOULDER, R_SHOULDER, L_HIP, R_HIP)
 WRISTS = (L_WRIST, R_WRIST)
@@ -64,6 +67,7 @@ class _Episode:
     cues: list = field(default_factory=list)    # (t, idx, box) where a cue fired
     boxes: list = field(default_factory=list)   # (t, idx, box) from start - margin on
     reasons: set = field(default_factory=set)
+    pocket: list = field(default_factory=list)  # (t, idx, box) where hand_to_body or pickup fired
 
 
 @dataclass
@@ -102,6 +106,7 @@ class TriggerFilter:
         self.ep_max = cfg.get("episode_max_seconds", 6.0)
         self.ep_margin = cfg.get("episode_margin_seconds", 0.5)
         self.k = cfg.get("clip_frames", 5)
+        self.pocket_frames = cfg.get("pocket_frames", 0)   # demo: extra keyframes around the hand-to-body moment
         self.tracks: dict[int, _Track] = {}
         self.pending: list[TriggerEvent] = []
         self.episodes: dict[int, _Episode] = {}
@@ -178,6 +183,8 @@ class TriggerFilter:
             ep.last_cue_t = t
             ep.cues.append((t, idx, p["box"]))
             ep.reasons |= set(reasons)
+            if {"hand_to_body", "pickup"} & set(reasons):
+                ep.pocket.append((t, idx, p["box"]))
 
         events = []
         for tid in [k for k, ep in self.episodes.items()
@@ -225,10 +232,32 @@ class TriggerFilter:
             if any(fill[1] == c[1] for c in chosen):
                 break
             chosen = sorted([*chosen, fill], key=lambda h: h[0])
+        chosen = self._pocket_keyframes(ep, chosen, nearest)
         keyframes = [(i, b) for _, i, b in chosen]
         strong = "pickup" in ep.reasons or {"near_object", "hand_to_body"} <= ep.reasons
         return TriggerEvent(tid, ep.cues[0][1], t0, sorted(ep.reasons), [(i, b) for _, i, b in ep.boxes],
                             keyframes=keyframes, end_t=t1, strong=strong)
+
+    def _pocket_keyframes(self, ep: _Episode, chosen: list, nearest) -> list:
+        """Demo addition (pocket_frames > 0): extra keyframes close together over the person's longest
+        hand-to-body / pickup movement, from POCKET_LEAD_S before it to its end. The K keyframes are
+        about 1.5 s apart over a 6 s episode, so the moment an item goes into a pocket can fall between
+        two of them (ucf_033: the AI saw the hand at the pocket, never the item going in)."""
+        if not self.pocket_frames or not ep.pocket:
+            return chosen
+        bursts = [[ep.pocket[0]]]
+        for c in ep.pocket[1:]:
+            if c[0] - bursts[-1][-1][0] > BURST_GAP_S:
+                bursts.append([])
+            bursts[-1].append(c)
+        burst = max(bursts, key=len)
+        a, b = burst[0][0] - POCKET_LEAD_S, burst[-1][0]
+        n = self.pocket_frames
+        for j in range(n):
+            h = nearest(ep.boxes, a + (b - a) * j / max(n - 1, 1))
+            if all(abs(h[0] - c[0]) >= POCKET_GAP_S for c in chosen):
+                chosen = sorted([*chosen, h], key=lambda x: x[0])
+        return chosen
 
     def _trim(self, ev: TriggerEvent, t: float) -> TriggerEvent:
         """Keep only the last buffer_seconds (the idx -> time map is linear per video)."""

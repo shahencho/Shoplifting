@@ -1,6 +1,7 @@
 import json
 import threading
 import time
+from pathlib import Path
 
 from theft_demo.alerts.telegram import TelegramNotifier, timing
 from theft_demo.events import Check
@@ -15,7 +16,7 @@ class FakeTelegram(TelegramNotifier):
         super().__init__("TOKEN", language="en", state_path=state_path)
 
     def _call(self, method, data=None, files=None, timeout=60):
-        self.calls.append((method, dict(data or {})))
+        self.calls.append((method, {**(data or {}), **{f"file:{k}": Path(f.name).name for k, f in (files or {}).items()}}))
         return {"username": "TheftBot"} if method == "getMe" else {"message_id": 100 + len(self.calls)}
 
     def sent(self, method):
@@ -92,6 +93,20 @@ def test_alert_clip_is_captioned_as_the_main_evidence(tmp_path):
     photo, video = tg.sent("sendPhoto")[-1], tg.sent("sendVideo")[-1]
     assert photo["caption"].startswith("🚨 Likely theft") and "confirmed" not in photo["caption"].lower()
     assert video["caption"] == "🎥 Main evidence" and video["reply_to_message_id"] == 42
+    assert video["file:video"] == "clip.mp4"
+
+
+def test_alert_sends_the_joined_evidence_video_when_there_is_one(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", [{"id": 5, "name": "@a"}])
+    c = check()
+    for name in ("snapshot.jpg", "clip.mp4", "evidence.mp4"):
+        (tmp_path / name).write_bytes(b"x")
+    c.files.update({"snapshot_path": str(tmp_path / "snapshot.jpg"), "clip_path": str(tmp_path / "clip.mp4")})
+    c.state, c.verdict, c.qwen_s = "confirmed", "CONFIRMED", 40.0
+    c.alert_time = time.time()
+    tg.notify("alert", c, evidence_path=str(tmp_path / "evidence.mp4"))
+    tg.flush()
+    assert tg.sent("sendVideo")[-1]["file:video"] == "evidence.mp4" and "5" in c.video_ids
 
 
 def test_new_bot_token_resets_linked_chats_and_offset(tmp_path):

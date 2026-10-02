@@ -9,10 +9,14 @@ Incident = what Telegram sees: one silent note, then one reply.
       a person who already has a check in an open incident (one person = one note / alert).
     - The first check of an incident that comes back confirmed or possible -> one alert (reply to the note),
       incident "alerted", camera cooldown after_alert_s.
-    - In an alerted incident: possible -> a later confirmed sends one "upgrade". A later confirmed / possible check of
-      the alerted person extends the evidence: its clip is joined to the alert's clip and the "Main evidence" video
-      in Telegram is replaced in place ("evidence"; an upgrade by that person does it too). One activity is cut into
-      several checks, and the act itself is often in a later one. Anything else is dashboard only.
+    - In an alerted incident: possible -> a later confirmed of the same person sends one "upgrade". A confirmed /
+      possible verdict on a *different* person sends that person their own alert (a new incident, no note), once
+      per person. Anything else is dashboard only.
+    - The "Main evidence" video follows the alerted person, not Qwen's verdicts: every clip of that person within
+      the evidence window (lead_s before the alerted check's act, max_s in all) is joined, whatever its verdict, and
+      so are episodes not sent to Qwen (person flagged or out of budget: Segment, clip only). One activity is cut
+      into several checks, the act is often in a check Qwen called NORMAL or never saw, and Qwen may confirm the
+      wrong seconds. A clip written after the alert replaces the video in Telegram in place ("evidence").
     - Every check of an open incident dismissed, and its join window over (no check can join any more) -> one
       silent "all clear" (reply to the note), incident "cleared". poll(t) sends it if the last answer came early.
     - During the cooldown no incident opens: new checks join the alerted incident (dashboard only, upgrade allowed).
@@ -80,13 +84,27 @@ class Check:
 
 
 @dataclass
+class Segment:
+    """An episode not sent to Qwen (person flagged or out of budget): only its clip is kept, for the Main evidence."""
+    n: int
+    tid: int
+    t: float                        # video time the episode closed
+    act_t: float
+    last_cue_t: float
+    files: dict = field(default_factory=dict)
+
+
+@dataclass
 class Incident:
     n: int
     t: float                        # video time of its first check
     checks: list[Check] = field(default_factory=list)
     state: str = "open"             # open / alerted / cleared
     alert: Check | None = None      # the check whose alert (or upgrade) was sent
-    evidence: list[Check] = field(default_factory=list)    # the alerted person's theft checks: their clips, joined
+    person: int | None = None       # the alerted person (track id): the Main evidence follows them
+    window: tuple[float, float] | None = None              # video time span of the Main evidence video
+    evidence: list = field(default_factory=list)           # the person's checks + segments in the window, by time
+    shown: list = field(default_factory=list)              # the items whose clips the last evidence video holds
     msg_ids: dict = field(default_factory=dict)
     video_ids: dict = field(default_factory=dict)
 
@@ -101,14 +119,18 @@ class Notice:
 
 class EventManager:
     def __init__(self, *, join_s: float = 20, after_alert_s: float = 30, allow_upgrade: bool = True,
-                 stop_on: tuple[str, ...] = ("CONFIRMED",), max_calls: int = 3, early_note: bool = True):
+                 stop_on: tuple[str, ...] = ("CONFIRMED",), max_calls: int = 3, early_note: bool = True,
+                 evidence_max_s: float = 45, evidence_lead_s: float = 15):
         self.join_s = join_s
         self.after_alert_s = after_alert_s
         self.allow_upgrade = allow_upgrade
         self.stop_on = set(stop_on)
         self.max_calls = max_calls
         self.early_note = early_note
+        self.evidence_max_s = evidence_max_s
+        self.evidence_lead_s = evidence_lead_s
         self.checks: list[Check] = []
+        self.segments: list[Segment] = []
         self.incidents: list[Incident] = []
         self.skipped: list[dict] = []
         self.cooldown_until = float("-inf")
@@ -117,10 +139,11 @@ class EventManager:
 
     @classmethod
     def from_config(cls, cfg: dict) -> "EventManager":
-        pp, cd = cfg["per_person"], cfg["cooldown"]
+        pp, cd, ec = cfg["per_person"], cfg["cooldown"], cfg.get("evidence") or {}
         return cls(join_s=cfg["incident"]["join_s"], after_alert_s=cd["after_alert_s"],
                    allow_upgrade=cd.get("allow_upgrade", True), stop_on=tuple(pp["stop_on"]),
-                   max_calls=pp["max_calls"], early_note=(cfg["alerts"].get("early_note") or {}).get("enabled", True))
+                   max_calls=pp["max_calls"], early_note=(cfg["alerts"].get("early_note") or {}).get("enabled", True),
+                   evidence_max_s=ec.get("max_s", 45), evidence_lead_s=ec.get("lead_s", 15))
 
     def on_episode(self, ev, t: float, frame_idxs: list[int], crop: list[int]) -> tuple[Check | None, Notice | None]:
         """ev: trigger.TriggerEvent (episode closed at video time t). Returns (check or None if skipped, early note)."""
@@ -170,19 +193,55 @@ class EventManager:
         inc = self.incidents[c.incident - 1]
         if inc.state == "open":
             if c.state in ALERT_STATES:
-                inc.state, inc.alert, inc.evidence = "alerted", c, [c]
-                self.cooldown_until = t + self.after_alert_s
-                return Notice("alert", c, inc)
+                return self._alert(inc, c, t)
             return self._clear(inc, t)
         if inc.state != "alerted" or c.state not in ALERT_STATES:
             return None
-        extend = bool(inc.evidence) and c.tid == inc.evidence[0].tid
-        if extend:
-            inc.evidence.append(c)
+        if c.tid != inc.person:
+            if any(i.person == c.tid for i in self.incidents if i.state == "alerted"):
+                return None                          # this person already had their own alert
+            # a different person: their own alert (ucf_037: the alert went to another man first, and the
+            # thief's later CONFIRMED stayed on the dashboard)
+            inc.checks = [x for x in inc.checks if x is not c]
+            new = Incident(len(self.incidents) + 1, c.t, checks=[c])
+            self.incidents.append(new)
+            c.incident, c.msg_ids, c.video_ids = new.n, new.msg_ids, new.video_ids    # no note: a plain alert
+            return self._alert(new, c, t)
         if self.allow_upgrade and c.state == "confirmed" and inc.alert is not None and inc.alert.state == "possible":
             inc.alert = c
-            return Notice("upgrade", c, inc, extend=extend)
-        return Notice("evidence", c, inc, extend=True) if extend else None
+            return Notice("upgrade", c, inc, extend=True)
+        return None
+
+    def _alert(self, inc: Incident, c: Check, t: float) -> Notice:
+        inc.state, inc.alert, inc.person = "alerted", c, c.tid
+        lead = min(self.evidence_lead_s, self.evidence_max_s)
+        inc.window = (c.act_t - lead, c.act_t - lead + self.evidence_max_s)
+        inc.evidence = sorted((x for x in [*self.checks, *self.segments] if self._in_evidence(inc, x)), key=lambda x: x.t)
+        self.cooldown_until = t + self.after_alert_s
+        return Notice("alert", c, inc, extend=len(inc.evidence) > 1)
+
+    def segment(self, ev, t: float) -> Segment:
+        """An episode skipped by on_episode: keep it as a clip-only segment (it may join a Main evidence video)."""
+        end = ev.end_t if ev.end_t is not None else ev.t
+        s = Segment(len(self.segments) + 1, ev.tid, round(t, 2), round(ev.t, 2), round(end, 2))
+        self.segments.append(s)
+        return s
+
+    def add_evidence(self, item) -> Incident | None:
+        """A clip of item (a check or a segment) was just written. Returns the alerted incident whose Main evidence
+        takes it (item added to its evidence), or None."""
+        for inc in reversed(self.incidents):
+            if inc.state == "alerted" and self._in_evidence(inc, item):
+                if all(x is not item for x in inc.evidence):
+                    inc.evidence.append(item)
+                    inc.evidence.sort(key=lambda x: x.t)
+                return inc
+        return None
+
+    @staticmethod
+    def _in_evidence(inc: Incident, x) -> bool:
+        """x is the alerted person's, and its episode (act_t .. t) overlaps the evidence window."""
+        return inc.window is not None and x.tid == inc.person and x.t >= inc.window[0] and x.act_t <= inc.window[1]
 
     def poll(self, t: float) -> list[Notice]:
         """All clear for open incidents whose checks are all dismissed once the join window is over

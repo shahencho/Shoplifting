@@ -229,7 +229,7 @@ class TelegramNotifier(Notifier):
             if ev.reason:
                 caption += f"\n{ev.reason}"
             photo = ev.files.get("snapshot_path")
-            clip = ev.files.get("clip_path")
+            clip = info.get("evidence_path") or ev.files.get("clip_path")    # the person's joined clips, if several
             def send(chat):
                 reply = self._reply(ev, chat)
                 if kind == "alert" and photo and Path(photo).exists():

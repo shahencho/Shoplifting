@@ -65,8 +65,8 @@ Output per run: `theft_demo/outputs/live/<video>_<time>/`
 
 **Check:**
 - A *check* starts when a person's burst of suspicious movement ends. "Suspicious movement" means a hand moving toward the body, a hand near a product, or a pickup. The burst is over when there have been about 2 s without a new movement.
-- Qwen gets 5 crops of that person.
-- A person gets at most 3 checks, and none after a CONFIRMED.
+- Qwen gets 5 crops of that person, plus up to 3 more taken close together around the moment a hand goes to the body or comes back from a product (`trigger.pocket_frames`). With 5 frames about 1.5 s apart, the moment an item goes into a pocket could fall between two frames.
+- A person gets no more checks after a CONFIRMED. The cap per person (`per_person.max_calls`) is 20, which is effectively no cap on a demo recording. With 3 or 6, shoppers who handle goods for a long time ran out of checks before the act. A live camera would need a per-minute limit instead.
 
 **Incident** (what Telegram sees):
 - The first check sends **one silent note**: "🟡 Suspicious movement, checking…".
@@ -75,11 +75,30 @@ Output per run: `theft_demo/outputs/live/<video>_<time>/`
   - "🚨 Likely theft" or "⚠️ Possible theft", with photo, reason and timing, then the clip captioned "🎥 Main evidence", as soon as any check says so (never "confirmed": the AI can be wrong);
   - otherwise "✅ all clear", once every check came back normal.
 - After an alert, a 30 s cooldown: new checks still show on the dashboard, but no new note is sent.
+- If the AI then says theft about a **different** person, that person gets their own alert (once per person). Before this, the second person's alert stayed on the dashboard (`ucf_037`: the alert went to another man, and the thief's confirmed check never reached the phone).
+
+**Main evidence** (the video in the alert) follows the alerted **person**, not the AI's verdicts:
+- It joins all of that person's clips from 15 s before the alerted act, up to 45 s in all (`evidence.lead_s`, `evidence.max_s`). Their checks count whatever the AI said, and so do episodes that were not sent to the AI because the person was already flagged or out of checks (kept as clips only, `events/S001/`).
+- Why: one act is cut into several 6 s checks, the act is often in a check the AI called normal or never saw, and the AI sometimes confirms the wrong seconds. Before this, the video could show the person just standing there.
+- A clip written after the alert replaces the video in Telegram in place (no new message).
 
 **Timing:**
 - "Act" is the person's last suspicious movement.
 - The check, and the note, follow about 2 s later.
 - The AI answer usually takes 30–90 s, sometimes up to 3 min, with `qwen3.6-plus`, a reasoning model.
+
+**AI model and thinking** (`verify.model`, `verify.reasoning`). Tested on 2026-10-02 on 8 UCF-Crime recordings with 9 labelled thefts, using `tools/validate.py --qwen`; the full tables are in `outputs/validate/model_comparison.md`:
+
+| Model | Alert video shows the theft | Alerts on other people | Per check | Answer time (median) |
+|---|---|---|---|---|
+| `qwen3.6-plus`, thinking on (model default) | 7/9 | 5 | $0.0065 | 37 s |
+| `qwen3.6-plus`, thinking off (`reasoning: none`) | 7/9 | 5 | $0.0005 | 3 s |
+| `gemini-3.1-flash-lite` | 5/9 | 8 | $0.0017 | 3 s |
+| `gpt-6-luna`, low thinking | 4/9 | 2 | $0.0001 | 4 s |
+| `gemma-4-31b` | 2/9 | 1 | $0.0003 | 8 s |
+
+- **Thinking off** missed the subtle thefts in `ucf_039` and `ucf_053` in all 3 runs; thinking on caught them.
+- **A two-step check** was tried and dropped: fast answers first, with UNCERTAIN ones asked again with thinking on. It cut alerts on other people from 5 to 2, but caught one theft fewer (6/9).
 
 ## Demo recordings (`data/videos.csv`)
 
@@ -98,6 +117,32 @@ In every case the check (and the silent note) followed the act by about 2 s. The
 - **YOLO is precomputed.** On this laptop's CPU, YOLO pose runs at about 3 fps, and the trigger needs about 10. A store box needs a GPU (or a Jetson) to run it live.
 - **The AI answer takes 30–90 s** (up to 3 min). Choosing a faster model is the next tuning step.
 - **This is a frozen copy.** Improvements in `src/` reach the demo only when they're deliberately copied over.
+
+## Validation (free, no Qwen)
+
+`data/labels.csv` holds the thefts in each recording: act start and end in seconds, and the thief's box as 0–1 fractions of the frame. A row with no times means "no theft to score", so every check in that video counts as a false check. `<id>_240p` and `<id>_144p` reuse the labels of `<id>`.
+
+```powershell
+theft_demo\.venv\Scripts\python -m theft_demo.tools.validate --tag mychange          # every labelled video with tracks
+theft_demo\.venv\Scripts\python -m theft_demo.tools.review theft_demo/outputs/validate/<run>   # page to check by eye
+```
+
+- `validate` runs the real pipeline on the cached YOLO. Qwen is replaced by scripted answers that arrive 45 s of video time after each check:
+  - `right`: a perfect AI that confirms only the checks showing the act
+  - `wrong`: the AI confirms only the thief's first check, whatever it shows
+- Per theft, `validate` reports:
+  - **caught**: a check of the thief with ≥ 2 of its 5 frames inside the act
+  - the time from the act to the check
+  - **proof**: the share of the act inside the final Main evidence video
+  - the checks on other people
+- `--qwen` uses the real AI instead, with its real delay replayed (it costs money and asks first). Without editing the config, `--model <OpenRouter id>` and `--reasoning none|minimal|low|medium|high` try another model or thinking level, `--pocket-frames N` tries another number of extra frames, and `--max-calls N` tries another budget.
+- `review` writes `review.html` next to the run. Per theft, it shows:
+  - the labelled act, with the thief in a yellow box
+  - the check that caught the act, with the person in blue, plus the 5 crops the AI sees
+  - the Main evidence video
+  - snapshots of everyone else who was checked
+
+  Each item has OK / Not OK buttons and a note field, and **Export CSV** saves the answers.
 
 ## Tests
 

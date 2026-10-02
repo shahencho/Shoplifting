@@ -96,7 +96,8 @@ class Runtime:
         sc, vc = self.cfg["stream"], self.cfg["verify"]
         self.stream = Stream(str(path), buffer_s=sc["buffer_s"], buffer_fps=sc["buffer_fps"], realtime=self.realtime,
                              drop_late=False)          # YOLO is precomputed: replay every frame, same as offline
-        verifier = AsyncVerifier(Verifier(vc["model"], timeout_s=vc["timeout_s"], max_tokens=vc.get("max_tokens", 16000)),
+        verifier = AsyncVerifier(Verifier(vc["model"], timeout_s=vc["timeout_s"], max_tokens=vc.get("max_tokens", 16000),
+                                          reasoning=vc.get("reasoning")),
                                  vc.get("max_parallel", 4)) if self.use_qwen else NoVerifier()
         self.out_dir = DEMO / "outputs" / "live" / f"{video_id}_{datetime.now():%Y%m%d_%H%M%S}"
         self.pipeline = Pipeline(self.cfg, self.stream, tracks, verifier=verifier, notifier=self.notifier,

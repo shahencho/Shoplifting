@@ -7,8 +7,9 @@ YOLO is precomputed (theft_demo/precompute.py) and replayed frame by frame: the 
 pose at the trigger's 10 checks per second. Everything after YOLO runs live.
 
 Per check, in <out_dir>/events/E001/: snapshot.jpg (the whole frame, the person highlighted), qwen.jpg (the 5
-crops Qwen saw), clip.mp4 (episode start - before_s ... check start + after_s), event.json; evidence.mp4 when a
-later check of the alerted person extends the alert's clip (the clips joined, at most evidence.max_s).
+crops Qwen saw), clip.mp4 (episode start - before_s ... check start + after_s), event.json; evidence.mp4 when the
+alerted person has more than one clip in the evidence window (joined, see events.py). An episode not sent to Qwen
+(person flagged or out of budget) keeps only its clip: <out_dir>/events/S001/clip.mp4.
 <out_dir>/events.jsonl gets a line on every state change; <out_dir>/timing.md is written at the end.
 """
 from __future__ import annotations
@@ -25,7 +26,7 @@ from typing import Callable
 import numpy as np
 
 from theft_demo.alerts import Notifier
-from theft_demo.events import ALERT_STATES, Check, EventManager, Incident, Notice
+from theft_demo.events import ALERT_STATES, Check, EventManager, Incident, Notice, Segment
 from theft_demo.evidence import draw_people, jpeg, read_clip, resize_max_side, strip, write_clip
 from theft_demo.stream import Stream
 from theft_demo.trigger import TriggerFilter, crop_box, select_frames
@@ -54,7 +55,7 @@ class Pipeline:
         self.em = EventManager.from_config(cfg)
         self.k, self.pad, self.kp_conf = tc["clip_frames"], tc["crop_padding"], tc.get("keypoint_conf", 0.3)
         self.max_side, self.quality = vc.get("max_side", 640), vc.get("jpeg_quality", 85)
-        self.before_s, self.after_s, self.evidence_max_s = ec["before_s"], ec["after_s"], ec.get("max_s", 45)
+        self.before_s, self.after_s = ec["before_s"], ec["after_s"]
         # raw frames kept for the crops: an episode is at most episode_max_seconds + margins, closed gap_s later
         self.keep_s = tc["buffer_seconds"] + tc.get("episode_max_seconds", 6) + tc.get("episode_gap_seconds", 2) + 2
         self._recent: deque[tuple[int, np.ndarray]] = deque()
@@ -146,7 +147,10 @@ class Pipeline:
         x1, y1, x2, y2 = crop_box([b for _, b in chosen], self.pad, self.width, self.height)
         c, note = self.em.on_episode(ev, t, [i for i, _ in chosen], [x1, y1, x2, y2])
         if c is None:
-            self.log(f"[trigger] person {ev.tid} t={t:.1f}s {'+'.join(ev.reasons)}: {self.em.skipped[-1]['why']}, no check")
+            seg = self.em.segment(ev, t)              # no Qwen, but the clip may belong in the person's evidence
+            self._clips.append((seg, self.stream.clip(ev.t - self.before_s, t), t + self.after_s))
+            self.log(f"[trigger] person {ev.tid} t={t:.1f}s {'+'.join(ev.reasons)}: {self.em.skipped[-1]['why']}, "
+                     f"no check (clip kept as S{seg.n})")
             return
         c.wall_time = self.clock() if self.clock else ""
         c.trigger_time = time.time()
@@ -201,47 +205,65 @@ class Pipeline:
             self._clips.remove(item)
             last = before[-1][0] if before else c.t - 1
             frames = before + [f for f in self.stream.clip(c.t, t_end) if f[0] > last]
-            path = self.out_dir / "events" / f"E{c.n:03d}" / "clip.mp4"
+            rel = f"events/{'S' if isinstance(c, Segment) else 'E'}{c.n:03d}"
+            path = self.out_dir / rel / "clip.mp4"
+            path.parent.mkdir(parents=True, exist_ok=True)
             span = frames[-1][0] - frames[0][0] if len(frames) > 1 else 0
             fps = (len(frames) - 1) / span if span > 0 else self.stream.buffer_fps
             if write_clip(frames, path, fps):
-                c.files.update({"clip": f"events/E{c.n:03d}/clip.mp4", "clip_path": str(path),
+                c.files.update({"clip": f"{rel}/clip.mp4", "clip_path": str(path),
                                 "clip_s": round(span, 1), "clip_t0": round(frames[0][0], 3), "clip_fps": round(fps, 3)})
-            self.save_event(c)
+            if isinstance(c, Check):
+                self.save_event(c)
             for n in [n for n in self._waiting if n.check is c]:
                 self._waiting.remove(n)
                 self._send(n)
+            self._on_clip(c)
+
+    def _on_clip(self, item: Check | Segment) -> None:
+        """A clip was written. If it belongs in an alerted person's Main evidence and the video sent so far lacks it,
+        rebuild the video and replace it in Telegram."""
+        inc = self.em.add_evidence(item)
+        if inc is None or "clip_t0" not in item.files or any(x is item for x in inc.shown):
+            return
+        if any("alert" in x.sent for x in inc.checks):     # else the alert, when sent, builds it with this clip
+            self._send(Notice("evidence", inc.alert, inc, extend=True))
 
     def _send(self, notice: Notice) -> None:
         c = notice.check
         c.sent.append(notice.kind)
         if notice.kind in ("alert", "upgrade"):
             c.alert_time = time.time()
-        info = {"incident": notice.incident.n}
-        if notice.extend and (path := self._evidence_clip(notice.incident, c)):
+        inc = notice.incident
+        info = {"incident": inc.n}
+        if notice.extend and (path := self._evidence_clip(inc, c)):
             info["evidence_path"] = str(path)
+        if notice.kind in ("alert", "upgrade", "evidence") and inc.state == "alerted":
+            inc.shown = [x for x in inc.evidence if "clip_t0" in x.files]
         self.notifier.notify(notice.kind, c, **info)
         self.save_event(c)
 
     def _evidence_clip(self, inc: Incident, c: Check) -> Path | None:
-        """The alerted person's theft clips joined in time order (overlaps once), the last evidence.max_s of it.
-        One activity is cut into several checks, and the act itself is often in a later one."""
+        """The alerted person's clips in the evidence window, joined in time order (overlaps once): the Main evidence
+        video. One activity is cut into several checks, and the act itself is often in one Qwen never confirmed."""
         clips = sorted((x for x in inc.evidence if "clip_t0" in x.files), key=lambda x: x.files["clip_t0"])
+        if len(clips) < 2:
+            return None
+        lo, hi = inc.window or (float("-inf"), float("inf"))
         frames: list = []
         for x in clips:
             last = frames[-1][0] if frames else float("-inf")
             frames += [f for f in read_clip(Path(x.files["clip_path"]), x.files["clip_t0"], x.files["clip_fps"])
-                       if f[0] > last + 1e-3]
-        if len(clips) < 2 or not frames:
+                       if f[0] > last + 1e-3 and lo <= f[0] <= hi]
+        if not frames:
             return None
-        frames = [f for f in frames if f[0] >= frames[-1][0] - self.evidence_max_s]
         rel = f"events/E{c.n:03d}/evidence.mp4"
         path = self.out_dir / rel
         if not write_clip(frames, path, statistics.median(x.files["clip_fps"] for x in clips)):
             return None
         for x in inc.evidence:                      # the dashboard banner plays it too
             x.files["evidence"] = rel
-            if x is not c:
+            if x is not c and isinstance(x, Check):
                 self.save_event(x)
         self.log(f"[E{c.n}] evidence: E{', E'.join(str(x.n) for x in clips)} joined, "
                  f"{frames[0][0]:.1f}-{frames[-1][0]:.1f}s -> {rel}")

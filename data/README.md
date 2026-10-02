@@ -64,6 +64,32 @@ data/dcsass/
 - **Where it is:** `config.yaml` → `datasets.zenodo.root` (currently the unpacked Downloads folder; point it elsewhere if you move it)
 - **Use:** `run_pipeline.py zenodo --dry-run` measures how often the trigger fires on known thefts (recall ceiling). Precision/specificity are meaningless here because there are no normal clips.
 
+## UCF-Crime full videos (next raw test set, real store footage)
+
+- **Source:** UCF-Crime, https://www.crcv.ucf.edu/projects/real-world/ (the official page links to a Dropbox where each part can be downloaded on its own)
+- **File we use:** `Anomaly-Videos-Part-4.zip`, 6.11 GB. It holds the **Shoplifting**, **Stealing** and **Vandalism** folders. Downloaded 2026-10-02; only `Shoplifting/` is unpacked so far, at `C:\Users\Shahen\Downloads\Anomaly-Videos-Part-4\Shoplifting\`.
+- **Why this set:** real CCTV, not staged, and the videos are whole and uncut. The authors dropped every video that was manually edited, a prank, not from a CCTV camera, from the news, handheld, or a compilation. YouTube clips can't be checked for this without watching each one, so this is the closest thing we have to a real store camera.
+- **Content:** Shoplifting 50 videos (`Shoplifting001_x264.mp4` … `055`, some numbers missing), 2.5 GB, 3.0 h in total. All 320×240, 30 fps, all readable. Length 12 s to 37 min, median 1.6 min. Already below our 360p limit, so no re-encoding. (Stealing about 100 and Vandalism about 50 per the paper, not unpacked yet.)
+- **Checked 2026-10-02 (contact sheets + a scene-cut scan): not all of them are raw.** Despite the paper's filter, some are YouTube uploads:
+  - edited, skip for raw tests: `019` (Calgary Police intro/outro), `027` (text card), `028` (THEFTCAM intro, "Please Subscribe" outro), `029` ("Thank you for watching" card), `030` ("Please Subscribe" overlay, blurred side padding), `038` (two camera views), `048` (two cameras + captions), `055` (three different scenes)
+  - found later while labelling (frame by frame): `054` cuts from a wide view to a close-up at 14.5 s, `032` has a blurred face at 12–15 s, `006` replays the act in slow motion (the clock jumps back from 13:09:38 to 13:09:23 at ~77 s), `049` is sped up ~2.5x (the store clock runs faster than the video, as with low-fps DVRs)
+  - watermark only, usable: `024`, `045` (LiveLeak), `054` (TITANVORTEX)
+  - black side bars (resized from another aspect ratio, people smaller), usable: `005`, `007`, `014`, `022`, `045`
+  - long ones, good for false alarms (theft is a short part): `014` (37 min), `040` (15 min), `012` (13 min)
+- **Labels:** every Shoplifting video contains a theft, so all label 1, as with `youtube_raw`. Stealing and Vandalism are not shop theft by default (many are outdoors); look at them before using any as theft or normal.
+- **Overlap with Test C:** DCSASS is cut from these same UCF-Crime videos (`Shoplifting001_x264_0.mp4` is a piece of `Shoplifting001_x264.mp4`), so results here are not independent of Test C. The difference is that here we run the whole recording, as the store camera would.
+- **Licence:** published for research. Check the terms before using any of it in a customer demo.
+- **Where to put it:** unzip only `Shoplifting/` (and `Stealing/` if needed) into `data/ucf_crime/`. Don't commit it (`data/*` is gitignored).
+
+- **Official act windows:** UCF-Crime publishes frame numbers of the anomaly for its test videos: `data/ucf_crime/Temporal_Anomaly_Annotation.txt`, from https://github.com/WaqasSultani/AnomalyDetectionCVPR2018 (30 fps; e.g. `Shoplifting017_x264.mp4 Shoplifting 360 420 -1 -1` = 12.0–14.0 s). 21 Shoplifting videos have them. For the others, the DCSASS labels (32 equal segments per video, theft 0/1) give a rough hint.
+- **Theft demo (2026-10-02):** 35 of these videos are in the theft demo as local test rows (`theft_demo/data/videos.csv`, ids `ucf_NNN`). Their thefts are labelled with exact times and the thief's box in `theft_demo/data/labels.csv`, and checked with `theft_demo/tools/validate.py` + `review.py` (see `theft_demo/README.md`, "Validation").
+
+**Status in `src/`: not wired up yet.** To use it as a raw set (same flow as `youtube_raw`: whole video, YOLO + trigger, then Qwen, no cutting):
+
+1. `config.yaml` → `datasets:` add `ucf_shoplifting: {root: data/ucf_crime/Shoplifting}`
+2. `scripts/_common.py` → add `"ucf_shoplifting"` to `DATASETS` and to the `load_youtube_raw` branch (it already handles flat all-theft folders; an optional `raw_labels.csv` in the folder overrides labels)
+3. Run the current baseline on it first, then add it to the frozen baseline (see `docs/benchmarking.md`), before testing any change on it
+
 ## 3. Later (not needed yet)
 
 - Simuletic synthetic dataset: https://www.kaggle.com/datasets/simuletic/cctv-shoplifting-detection-dataset-yolo-and-vlm → `data/simuletic/`

@@ -1,0 +1,47 @@
+video,act_start_s,act_end_s,x1,y1,x2,y2,notes
+ucf_017,12.0,14.0,0.352,0.048,0.614,0.415,"UCF official (frames 360-420). Man in tan suit at the top takes a bag from the counter; fisheye view, YOLO barely detects him"
+ucf_031,4.0,11.0,0.030,0.564,0.200,0.850,UCF official (frames 120-330). Man in white shirt bottom-left hides items while the clerk works
+yJNfmbiioA4,10.0,15.5,0.436,0.051,0.701,0.692,Demo video (also _240p/_144p). Man in tan hooded jacket takes an item from the shelf (10.5-11.2 s) and hides it in his jacket (13.5-15 s); the clip zooms in at 5 s
+fsqruJl85yo,39.5,50.5,0.234,0.053,0.726,0.824,Demo video (also _240p/_144p). Man in black cap picks up a white item at the counter (39.5-42 s) and puts it in his grey bag (43.5-50.5 s)
+d4WZ_Yl0_fI,,,,,,,Demo video. Edited compilation (store cameras then a phone outside); no clear shop theft to label: scored for false checks only
+ucf_033,21.0,25.0,0.242,0.212,0.457,0.932,UCF official (frames 630-750). Man in blue shirt takes an item from the table (21.5-23.5 s) and puts it in his shorts pocket
+ucf_054,25.0,31.5,0.212,0.147,0.838,0.863,By eye (DCSASS hint 25-27 s). Man in white T-shirt with a towel on his shoulder takes a phone from the display and hides it under the towel. EDITED: camera cut at 14.5 s (TITANVORTEX upload)
+ucf_024,8.0,19.0,0.256,0.313,0.467,0.535,UNCERTAIN by eye (DCSASS hint 34-40 s does not show it). Man in red jacket behind the seated clerk reaches into the drawers (8-11 s) and walks out left (15-21 s)
+ucf_045,43.0,44.0,0.392,0.301,0.524,0.769,By eye (DCSASS hint 44-51 s). Flash mob at the entrance: man carries a yellow box out
+ucf_045,44.5,46.0,0.048,0.415,0.237,0.777,By eye. Flash mob: man in red jacket carries goods out
+ucf_045,45.5,47.5,0.276,0.263,0.423,0.803,By eye. Flash mob: man in white shirt carries a red item out
+ucf_013,14.0,28.0,0.72,0.33,1.0,0.75,UNCERTAIN by eye (DCSASS hint 6-57 s). Group of women at the right table puts items into bags; YOLO detects almost nobody in this top-down view
+ucf_013,28.0,44.0,0.0,0.68,0.25,1.0,UNCERTAIN by eye. Woman in white crouches at the bottom-left edge with items
+ucf_016,21.0,24.0,0.198,0.386,0.512,0.999,UCF official (frames 630-720). Woman in pink sari lifts a boxed item off the shelf (20.5-22 s) and hides it
+ucf_032,9.0,14.5,0.090,0.535,0.283,0.990,UNCERTAIN by eye (DCSASS: no theft segment). Man in grey hoodie crouches at the left rack with his partner and takes items. EDITED: a face is blurred at 12-15 s
+ucf_032,9.0,14.5,0.173,0.569,0.473,0.995,UNCERTAIN by eye. His partner in a white cap and black jacket at the same rack
+ucf_037,38.0,40.0,0.409,0.128,0.709,0.591,UCF official (frames 1140-1200). Jewellery counter: man in olive shirt takes the jewellery he is shown and walks out (39-40.5 s)
+ucf_053,50.0,57.0,0.666,0.462,0.758,0.764,UNCERTAIN by eye (DCSASS hint 61-66 s shows an empty store). Glasses store: woman in plaid shirt with a shoulder bag takes a pair off the display and turns to her bag; she leaves at 59 s
+ucf_025,30.0,36.0,0.011,0.472,0.341,0.994,UNCERTAIN by eye (DCSASS hint 23-48 s). Dark close-up of clothes racks: woman at left reaches into the rack
+ucf_025,44.0,48.5,0.022,0.259,0.243,0.971,UNCERTAIN by eye. Same woman at left holds a light garment (her track id changes)
+ucf_005,24.0,29.0,0.382,0.137,0.578,0.918,"UCF official (frames 720-930). Phone store, a pair: man in dark jacket with fur hood at the left display, then close to his partner"
+ucf_005,27.0,31.0,0.481,0.114,0.606,0.833,UCF official. His partner in olive jacket walks toward the camera tucking an item into his jacket (29.5-31.8 s)
+ucf_022,9.0,14.0,0.158,0.265,0.348,0.721,UCF official (frames 270-420). Grocery aisle: young man in dark T-shirt takes items from the left shelf; his blond partner in navy T-shirt (track 1) stands in front of him and hides him from 10.7 s
+ucf_022,48.0,52.0,0.140,0.301,0.388,0.699,UCF official (frames 1440-1560). Same man in dark T-shirt bends to the left shelf and takes items
+ucf_049,34.0,45.0,0.408,0.293,0.764,0.938,"UCF official (frames 1020-1350). Phone shop: man in navy shirt and shorts (alone) takes a phone off the display, handles it, hand to pocket at 41 s. SPED UP: the store clock runs ~2.5x faster than the video (09:13:23 at 33 s, 09:13:55 at 46 s)"
+ucf_050,74.0,79.0,0.214,0.121,0.381,0.499,"By eye (DCSASS hint 73-81 s). Phone shop: boy in red at the left bends at the stools, picks up an item (75-76 s) and walks off top-left with it"
+ucf_018,16.0,31.0,0.163,0.519,0.425,1.000,"UNCERTAIN by eye (DCSASS hint 13-31 s). Supermarket aisle from above: man in striped shirt at the boxes, bottom-left"
+ucf_018,46.0,58.0,0.200,0.562,0.419,1.000,"UNCERTAIN by eye (DCSASS hint 40-58 s). Same man, now holding a child in pink, at the boxes"
+ucf_015,67.0,72.0,0.418,0.385,0.802,0.989,UCF official (frames 2010-2160). Electronics store: man in white shirt reaches over the counter (68-70 s) and walks off
+ucf_047,64.0,78.0,0.307,0.439,0.571,0.806,"By eye (DCSASS hint 67-79 s). Convenience store, a group at the counter: girl in white crouches at the lower snack shelf for a long time, bottom centre (her track id changes)"
+ucf_010,25.0,30.7,0.270,0.442,0.379,0.833,UCF official (frames 750-920). Supermarket aisle: girl in white top with a dark bag (left) puts items to her bag. UNCERTAIN which of the two
+ucf_010,25.0,30.7,0.846,0.570,0.992,0.977,UCF official. Boy in yellow crouching at the low shelf (right); YOLO barely detects him
+ucf_010,51.7,65.7,0.846,0.570,0.992,0.977,UCF official (frames 1550-1970). Boy in yellow crouching at the low shelf (right); YOLO barely detects him
+ucf_039,73.0,78.0,0.509,0.235,0.640,0.675,UCF official (frames 2190-2340). Store entrance: heavy man in dark shirt picks up a package at the left counter (71-73 s) and walks out of the door with it (74-77 s)
+ucf_021,69.0,74.0,0.139,0.013,0.495,0.737,UCF official (frames 2070-2220). Jewellery store: man in purple shirt at the left reaches into the display while the clerk in a hijab bends down
+ucf_036,103.0,107.0,0.156,0.397,0.428,0.996,By eye (DCSASS hint 103-107 s). Crowded clothing store: woman in purple at the left reaches into the rack
+ucf_036,113.0,121.0,0.156,0.437,0.442,1.000,By eye (DCSASS hint 114-122 s). Same woman in purple holds a white bag (113 s) and lifts a blue box (119 s)
+ucf_001,51.7,60.5,0.459,0.364,0.657,0.790,UCF official (frames 1550-2000). Phone accessories store: man in orange shirt bends into the display at the counter
+ucf_001,54.5,66.7,0.501,0.389,0.787,0.790,UCF official. His partner in white shirt bends into the display (his track id changes at ~63 s)
+ucf_009,146.0,150.5,0.323,0.324,0.710,0.955,By eye (DCSASS hint 157-173 s). Phone shop counter: customer in beige checked shirt (left) reaches over the counter and takes a phone box
+ucf_009,164.0,169.5,0.247,0.214,0.493,0.733,By eye. Same customer walks out of the door with it
+ucf_042,72.0,80.0,0.633,0.526,0.952,0.861,UNCERTAIN by eye (DCSASS hint 75-85 and 91-107 s). Crowded silver shop: man in red at bottom-right reaches into the display while a group with backpacks crowds the counter
+ucf_007,18.3,25.3,0.628,0.257,0.799,0.930,UCF official (frames 550-760). Sari shop: woman in multicolour dress at the counter handles an item at her bag (22-24 s); YOLO misses both women until 23.9 s. UNCERTAIN which woman
+ucf_007,154.3,164.0,0.311,0.164,0.435,0.646,UCF official (frames 4630-4920). Woman in yellow at the counter handles a blue cloth. UNCERTAIN which woman
+ucf_020,78.0,82.0,0.101,0.113,0.394,0.530,"UCF official (frames 2340-2460). Counter from above: man in lime shirt leans over the counter, grabs at 80.5 s and leaves; YOLO sees him in few frames"
+ucf_004,73.3,163.3,0.392,0.097,0.626,0.525,"UCF official (frames 2200-4900), a 90 s window: goldsmith counter from above, two older men lean over it while the jeweller shows pieces. UNCERTAIN: the act itself is not visible at this resolution; labelled the man in grey leaning over the counter"

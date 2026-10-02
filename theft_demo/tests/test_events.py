@@ -18,7 +18,7 @@ def check(em, tid, t):
     return c, note
 
 
-def test_checks_within_join_window_share_one_note_and_one_alert():
+def test_checks_within_join_window_share_one_note():
     em = EventManager(join_s=20, after_alert_s=30)
     c1, n1 = check(em, 1, 10)
     c2, n2 = check(em, 2, 15)
@@ -27,9 +27,23 @@ def test_checks_within_join_window_share_one_note_and_one_alert():
     assert c1.incident == c2.incident == c3.incident == 1
     assert c1.msg_ids is c2.msg_ids                 # replies go under the one note
     assert em.on_verdict(c2, v("CONFIRMED"), 50).kind == "alert"
-    assert em.on_verdict(c1, v("CONFIRMED"), 55) is None        # same incident: dashboard only
     assert em.on_verdict(c3, v("NORMAL"), 60) is None
-    assert [c.state for c in em.checks] == ["confirmed", "confirmed", "dismissed"]
+    assert [c.state for c in em.checks] == ["checking", "confirmed", "dismissed"]
+
+
+def test_theft_verdict_on_a_different_person_gets_its_own_alert_once():
+    em = EventManager(join_s=20, after_alert_s=30)
+    c1, _ = check(em, 2, 19)                         # another man at the counter
+    c2, _ = check(em, 1, 38)                         # the thief, same incident (within join_s / cooldown)
+    c3, _ = check(em, 1, 42)
+    assert c2.incident == c3.incident == 1
+    n1 = em.on_verdict(c1, v("CONFIRMED"), 52)
+    assert n1.kind == "alert" and em.incidents[0].person == 2
+    n2 = em.on_verdict(c2, v("CONFIRMED"), 116)      # the thief: not dashboard only any more
+    assert n2.kind == "alert" and c2.incident == 2 and em.incidents[1].person == 1
+    assert c2.msg_ids is not c1.msg_ids and not c2.msg_ids          # its own alert, not a reply to the note
+    assert c2 not in em.incidents[0].checks
+    assert em.on_verdict(c3, v("CONFIRMED"), 130) is None           # the thief already has an alert
 
 
 def test_all_dismissed_sends_one_clear_only_when_every_check_answered():
@@ -66,10 +80,10 @@ def test_same_person_stays_in_its_open_incident_past_the_window():
     assert n2 is None and c2.incident == 1
 
 
-def test_possible_then_confirmed_sends_one_upgrade():
+def test_possible_then_confirmed_of_the_same_person_sends_one_upgrade():
     em = EventManager(join_s=20, allow_upgrade=True)
     c1, _ = check(em, 1, 10)
-    c2, _ = check(em, 2, 12)
+    c2, _ = check(em, 1, 16)
     assert em.on_verdict(c1, v("UNCERTAIN", 50), 40).kind == "alert"
     assert em.on_verdict(c2, v("CONFIRMED"), 45).kind == "upgrade"
 
@@ -86,8 +100,8 @@ def test_no_new_note_during_the_alert_cooldown():
     c1, _ = check(em, 1, 10)
     em.on_verdict(c1, v("CONFIRMED"), 40)                   # cooldown until 70
     c2, n2 = check(em, 2, 60)
-    assert n2 is None and c2.incident == 1                  # joins the alerted incident
-    assert em.on_verdict(c2, v("CONFIRMED"), 90) is None    # no second alert
+    assert n2 is None and c2.incident == 1                  # joins the alerted incident: no note
+    assert em.on_verdict(c2, v("NORMAL"), 65) is None       # dashboard only
     c3, n3 = check(em, 3, 75)
     assert n3.kind == "early" and c3.incident == 2          # cooldown over
 
@@ -114,19 +128,44 @@ def test_timing_from_the_act():
     assert tm["act_to_check_s"] == 2.0 and tm["qwen_s"] == 30.0 and tm["act_to_alert_s"] == 35.0
 
 
-def test_later_theft_checks_of_the_alerted_person_extend_the_evidence():
+def test_evidence_follows_the_alerted_person_whatever_the_verdicts():
     em = EventManager(join_s=20, after_alert_s=30)
     c1, _ = check(em, 33, 36)
     c2, _ = check(em, 33, 42)                    # same person, same incident (verdicts arrive later)
     c3, _ = check(em, 7, 44)
     c4, _ = check(em, 33, 49)
-    assert em.on_verdict(c1, v("CONFIRMED"), 110).kind == "alert"
-    n2 = em.on_verdict(c2, v("CONFIRMED"), 150)
-    assert n2.kind == "evidence" and n2.extend
-    assert em.on_verdict(c3, v("CONFIRMED"), 155) is None        # another person: dashboard only
-    assert em.on_verdict(c4, v("NORMAL"), 160) is None           # normal: nothing to add
-    assert em.incidents[0].evidence == [c1, c2]
-    assert c1.video_ids is c2.video_ids                           # the one evidence video to replace
+    n1 = em.on_verdict(c1, v("CONFIRMED"), 110)
+    assert n1.kind == "alert" and n1.extend
+    inc = em.incidents[0]
+    assert inc.person == 33 and inc.evidence == [c1, c2, c4]     # c4 included before (and whatever) its verdict
+    assert em.on_verdict(c2, v("NORMAL"), 150) is None
+    n3 = em.on_verdict(c3, v("CONFIRMED"), 155)                  # another person: their own alert
+    assert n3.kind == "alert" and em.incidents[1].person == 7 and em.incidents[1].evidence == [c3]
+    assert em.on_verdict(c4, v("NORMAL"), 160) is None
+    assert inc.evidence == [c1, c2, c4] and c1.video_ids is c2.video_ids
+
+
+def test_evidence_window_from_lead_s_before_the_alerted_act():
+    em = EventManager(join_s=20, after_alert_s=30, max_calls=10, evidence_max_s=45, evidence_lead_s=15)
+    early, _ = check(em, 1, 10)                   # act 8-10: before the window
+    c, _ = check(em, 1, 30)                       # act 28-30 -> window 13 .. 58
+    late, _ = check(em, 1, 62)                    # act 60-62: after it
+    em.on_verdict(c, v("UNCERTAIN"), 40)
+    inc = em.incidents[-1]
+    assert inc.window == (13, 58) and inc.evidence == [c]
+    assert em.add_evidence(late) is None and em.add_evidence(early) is None
+
+
+def test_skipped_episode_of_the_alerted_person_joins_the_evidence_as_a_segment():
+    em = EventManager(join_s=20, after_alert_s=30)
+    c1, _ = check(em, 4, 20)
+    em.on_verdict(c1, v("CONFIRMED"), 30)
+    assert check(em, 4, 34) == (None, None)      # flagged: no more Qwen checks
+    seg = em.segment(ep(4, 32), 34)
+    other = em.segment(ep(9, 32), 34)
+    assert em.add_evidence(seg) is em.incidents[0] and em.incidents[0].evidence == [c1, seg]
+    assert em.add_evidence(seg) is em.incidents[0] and em.incidents[0].evidence == [c1, seg]   # added once
+    assert em.add_evidence(other) is None
 
 
 def test_upgrade_by_the_alerted_person_also_extends_the_evidence():

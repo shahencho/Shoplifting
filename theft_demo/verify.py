@@ -53,7 +53,7 @@ def parse_response(text: str) -> tuple[str, int, str]:
 class Verifier:
     def __init__(self, model: str, *, base_url: str | None = None, api_key: str | None = None,
                  timeout_s: float = 180, max_tokens: int = 16000, temperature: float = 0.0,
-                 prompt_path: Path = DEMO / "prompts" / "theft_verify.txt"):
+                 reasoning: str | None = None, prompt_path: Path = DEMO / "prompts" / "theft_verify.txt"):
         base_url = base_url or os.getenv("VLM_API_URL", "https://openrouter.ai/api/v1")
         api_key = api_key or os.getenv("VLM_API_KEY", "")
         if not api_key or not model:
@@ -63,6 +63,8 @@ class Verifier:
         self.timeout_s = timeout_s
         self.max_tokens = max_tokens
         self.temperature = temperature
+        # OpenRouter reasoning effort: none (thinking off) / minimal / low / medium / high; None = the model's default
+        self.reasoning = reasoning
         self.prompt = prompt_path.read_text(encoding="utf-8")
 
     def classify(self, frames: list[bytes]) -> Verdict:
@@ -82,7 +84,8 @@ class Verifier:
             try:
                 resp = self.client.with_options(timeout=left).chat.completions.create(
                     model=self.model, messages=messages, temperature=self.temperature, max_tokens=self.max_tokens,
-                    extra_body={"usage": {"include": True}},   # OpenRouter: return cost
+                    extra_body={"usage": {"include": True},     # OpenRouter: return cost
+                                **({"reasoning": {"effort": self.reasoning}} if self.reasoning else {})},
                 )
             except APITimeoutError:
                 continue                                        # loop ends as TIMEOUT

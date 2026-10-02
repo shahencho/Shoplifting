@@ -53,7 +53,7 @@ class Recorder:
         self.sent = []
 
     def notify(self, kind, event=None, **info):
-        self.sent.append((kind, event.n, event.state, "clip" in event.files))
+        self.sent.append((kind, event.n, event.state, "clip" in event.files, "evidence_path" in info))
 
 
 def _video(path, seconds=14):
@@ -98,10 +98,32 @@ def test_normal_closes_the_note_with_one_all_clear(tmp_path):
     assert [s[0] for s in rec.sent] == ["early", "clear"]
 
 
-def test_flagged_person_is_not_checked_again(tmp_path):
+def test_flagged_person_is_not_checked_again_but_the_episode_joins_the_evidence(tmp_path):
     pipe, rec, ver = _run(tmp_path, ["CONFIRMED"], [(1, 2.0, 3.0, 5.0), (1, 8.0, 9.0, 11.0)])
     assert len(ver.calls) == 1 and pipe.em.skipped[0]["why"] == "person already flagged"
+    assert [s[0] for s in rec.sent] == ["early", "alert", "evidence"]     # the act may be in the skipped episode
+    seg, c1 = pipe.em.segments[0], pipe.events[0]
+    assert (tmp_path / "out" / seg.files["clip"]).stat().st_size > 0
+    assert pipe.em.incidents[0].evidence == [c1, seg]
+    ev = tmp_path / "out" / c1.files["evidence"]
+    cap = cv2.VideoCapture(str(ev))
+    n = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    cap.release()
+    assert n >= 0.9 * (seg.files["clip_t0"] + seg.files["clip_s"] - c1.files["clip_t0"]) * c1.files["clip_fps"]
+
+
+def test_alert_sends_the_persons_joined_clips_whatever_their_verdicts(tmp_path):
+    _video(tmp_path / "v.mp4")
+    cfg = copy.deepcopy(yaml.safe_load((DEMO / "config.yaml").read_text(encoding="utf-8")))
+    rec, ver = Recorder(), LateVerifier(["CONFIRMED", "NORMAL", "NORMAL"], 3)   # answers once all 3 started
+    pipe = Pipeline(cfg, Stream(str(tmp_path / "v.mp4"), buffer_s=15, buffer_fps=10), _tracks(), verifier=ver,
+                    notifier=rec, out_dir=tmp_path / "out", log=lambda m: None)
+    pipe.trigger = FakeTrigger([(1, 1.0, 2.0, 4.0), (1, 5.0, 6.0, 8.0), (2, 9.0, 10.0, 11.0)])
+    pipe.run()
     assert [s[0] for s in rec.sent] == ["early", "alert"]
+    assert rec.sent[1][4], "the alert carries the joined clip (its own check + the person's NORMAL one)"
+    c1, c2, c3 = pipe.events
+    assert pipe.em.incidents[0].evidence == [c1, c2] and "evidence" not in c3.files
 
 
 class SilentVerifier(FakeVerifier):
