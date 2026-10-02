@@ -16,9 +16,11 @@ All commands run from the **repo root**.
 ```powershell
 python -m venv theft_demo/.venv
 theft_demo\.venv\Scripts\python -m pip install -r theft_demo/requirements.txt
-theft_demo\.venv\Scripts\python -m theft_demo.tools.get_videos      # the 3 recordings -> theft_demo/data/
-theft_demo\.venv\Scripts\python -m theft_demo.precompute            # YOLO once per video (~15 min on a laptop CPU)
+theft_demo\.venv\Scripts\python -m theft_demo.tools.get_videos      # YouTube recordings -> theft_demo/data/
+theft_demo\.venv\Scripts\python -m theft_demo.precompute            # YOLO once per video (a few min each on a laptop CPU)
 ```
+
+The UCF-Crime recordings can't be downloaded this way. Copy them from the UCF-Crime zip (`Anomaly-Videos-Part-4/Shoplifting/Shoplifting033_x264.mp4` → `theft_demo/data/ucf_033.mp4`, and so on). See `data/README.md`.
 
 To get the YOLO weights (`yolo11n.pt`, `yolo11n-pose.pt`), either copy them into `theft_demo/models/` or let ultralytics download them.
 
@@ -85,7 +87,7 @@ Output per run: `theft_demo/outputs/live/<video>_<time>/`
 **Timing:**
 - "Act" is the person's last suspicious movement.
 - The check, and the note, follow about 2 s later.
-- The AI answer usually takes 30–90 s, sometimes up to 3 min, with `qwen3.6-plus`, a reasoning model.
+- The AI answer takes about 3 s with `qwen3.6-plus` and thinking off (`verify.reasoning: none`, the demo setting). With thinking on (the model's default), it takes 30–90 s, sometimes up to 3 min.
 
 **AI model and thinking** (`verify.model`, `verify.reasoning`). Tested on 2026-10-02 on 8 UCF-Crime recordings with 9 labelled thefts, using `tools/validate.py --qwen`; the full tables are in `outputs/validate/model_comparison.md`:
 
@@ -102,20 +104,23 @@ Output per run: `theft_demo/outputs/live/<video>_<time>/`
 
 ## Demo recordings (`data/videos.csv`)
 
-Measured in real time with Qwen on 2026-10-01, with 4 parallel AI calls (the config now allows 8, which cuts the waiting on d4WZ):
+The dropdown shows real store CCTV from UCF-Crime (320×240, uncut): the 5 recordings that `qwen3.6-plus` with thinking off caught on 2026-10-02 (`tools/validate.py --qwen --reasoning none`). The theft times are UCF-Crime's official annotations.
 
-| Video | Length | Checks | Telegram | Act → alert | AI cost |
-|---|---|---:|---|---:|---:|
-| `yJNfmbiioA4` | 19 s | 6 (3 CONFIRMED) | 1 note → 1 alert | **35 s** | $0.035 |
-| `fsqruJl85yo` | 52 s | 6 (person 33 CONFIRMED ×3, 3 shoppers normal) | 1 note → 1 alert | **37 s** | $0.040 |
-| `d4WZ_Yl0_fI` | 2:23 | 13 (3 CONFIRMED), 5 repeats not re-checked | 3 notes → 2 alerts, 1 all clear | 72 s, 124 s | $0.087 |
+| Video | Title | Length | Theft | Checks | Result (thinking off) | AI cost |
+|---|---|---|---|---:|---|---:|
+| `ucf_033` | Clothing store | 0:30 | 0:21–0:25 | 8 | alert on the thief; the alert video holds the act | $0.004 |
+| `ucf_031` | Equipment store counter | 0:15 | 0:04–0:11 | 2 | alert on the thief; the alert video holds the act | $0.001 |
+| `ucf_049` | Phone shop | 1:12 | 0:34–0:45 | 5 | alert on the thief (91% of the act in the video); 1 alert on another customer | $0.003 |
+| `ucf_037` | Jewellery store | 0:46 | 0:38–0:40 | 19 | alert on the thief; the alert video holds the act; 1 alert on another man at the counter | $0.009 |
+| `ucf_001` | Phone accessories store | 2:25 | 0:52–1:07 (two men) | 21 | alerts on both thieves; the alert videos hold the acts | $0.009 |
 
-In every case the check (and the silent note) followed the act by about 2 s. The rest of the delay is the AI: 11–143 s per answer, plus up to 98 s of waiting for a free slot on the busy d4WZ video.
+The AI answered in about 3 s (median). The earlier YouTube recordings (`yJNfmbiioA4`, `fsqruJl85yo`, `d4WZ_Yl0_fI`) were taken off the list: they were never tested with thinking off. To bring one back, add its row again (see git history).
 
 ## Known limits
 
 - **YOLO is precomputed.** On this laptop's CPU, YOLO pose runs at about 3 fps, and the trigger needs about 10. A store box needs a GPU (or a Jetson) to run it live.
-- **The AI answer takes 30–90 s** (up to 3 min). Choosing a faster model is the next tuning step.
+- **Thinking off is fast but misses subtle thefts.** It takes about 3 s per answer, but it missed `ucf_039` (a package picked up and carried out) and `ucf_053` (glasses into a bag), which thinking on catches. The dropdown shows only recordings it catches.
+- **Staff can be taken for thieves.** On `ucf_021` the AI called the clerk a thief. Telling staff from customers is planned per store (a store-specific line in the prompt, e.g. the uniform).
 - **This is a frozen copy.** Improvements in `src/` reach the demo only when they're deliberately copied over.
 
 ## Validation (free, no Qwen)

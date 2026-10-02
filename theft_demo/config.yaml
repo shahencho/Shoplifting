@@ -37,10 +37,11 @@ per_person: {stop_on: [CONFIRMED], max_calls: 20}  # a flagged person gets no mo
                                                    # the act, and 3 or 6 checks ran out first (UCF 037/039/021, see
                                                    # README "Validation"). A live camera needs a per-minute limit instead
 
-verify: {model: qwen/qwen3.6-plus, frames: 5, max_side: 640, jpeg_quality: 85, timeout_s: 180, max_tokens: 16000,
-         max_parallel: 8, on_timeout: possible}     # TIMEOUT / ERROR -> "Possible theft (not verified)"; 8 parallel: d4WZ queued up to 98 s with 4
-         # reasoning: none                          # optional OpenRouter thinking effort: none / minimal / low / medium /
-                                                    # high; unset = the model's default (qwen3.6-plus thinks, ~35 s)
+verify: {model: qwen/qwen3.6-plus, reasoning: none, frames: 5, max_side: 640, jpeg_quality: 85, timeout_s: 180,
+         max_tokens: 16000, max_parallel: 8, on_timeout: possible}
+         # reasoning: OpenRouter thinking effort (none / minimal / low / medium / high; unset = the model's default).
+         # none: ~3 s and $0.0005 per check, 13x cheaper than thinking (~37 s); misses subtle thefts thinking catches
+         # (ucf_039 / ucf_053), see README "AI model and thinking". TIMEOUT / ERROR -> "Possible theft (not verified)"
 
 incident: {join_s: 20}        # checks starting within this long of an incident's first check share its Telegram note
 
