@@ -29,7 +29,7 @@ import numpy as np
 from faces import archive, enroll as enroll_mod
 from faces.alerts import Notifier
 from faces.evidence import RED, cut_clip, face_crop, jpeg, side_by_side, transcode
-from faces.index import build, index_path, load_all, save
+from faces.index import Index, build, index_path, load, save
 from faces.search import report, search
 from faces.watchlist import Watchlist
 
@@ -67,7 +67,9 @@ class Runtime:
         self.telegram = None                 # set by run_live when a bot token is configured
         self.log = log
         self.wl = wl or Watchlist()
-        self.indexes = load_all(cfg["model"]["name"]) if indexes is None else indexes
+        self._indexes: dict[str, Index] = indexes if indexes is not None else {}
+        self._ix_mtime: dict[str, float] = {}
+        self._fixed = indexes is not None    # tests pass their own
         self.version = 0                     # bumps when the watchlist changes: the player reloads embeddings
         self.closing = False
         self._model = None
@@ -79,6 +81,36 @@ class Runtime:
         self._next_job = 1
         threading.Thread(target=self._worker, daemon=True, name="jobs").start()
         self.player = Player(self)
+
+    @property
+    def indexes(self) -> dict[str, Index]:
+        """The archive's indexes, reloaded when one appears or changes on disk (e.g. `python -m faces.index` run
+        while the dashboard is up): no restart needed."""
+        if self._fixed:
+            return self._indexes
+        present = set()
+        for r in archive.recordings():
+            p = index_path(r["id"])
+            if not p.exists():
+                continue
+            present.add(r["id"])
+            mt = p.stat().st_mtime
+            if self._ix_mtime.get(r["id"]) == mt:
+                continue
+            try:
+                ix = load(p)
+            except Exception as e:                 # half-written by a running job: next time
+                self.log(f"[runtime] {r['id']}: index not readable yet ({e})")
+                continue
+            if ix.meta.get("model") and ix.meta["model"] != self.cfg["model"]["name"]:
+                self.log(f"[runtime] {r['id']}: indexed with {ix.meta['model']}, not {self.cfg['model']['name']}: skipped")
+            else:
+                self._indexes[r["id"]] = ix
+            self._ix_mtime[r["id"]] = mt
+        for gone in set(self._indexes) - present:
+            self._indexes.pop(gone, None)
+            self._ix_mtime.pop(gone, None)
+        return self._indexes
 
     # --- model (loaded once, ~520 MB) ---
 
@@ -182,10 +214,11 @@ class Runtime:
         ix = build(archive.video_path(rec_id), self.model(), self.cfg["index"]["checks_per_s"], rec_id=rec_id,
                    progress=progress)
         save(ix, index_path(rec_id))
-        self.indexes[rec_id] = ix
+        self._indexes[rec_id] = ix
         job.message = f"{ix.usable} usable faces; checking the watchlist"
-        res = search(self.wl, self.cfg, recording_ids=[rec_id], indexes=self.indexes)
-        report(self.wl, self.cfg, res, self.indexes, self.notifier, not_found=False)
+        indexes = self.indexes
+        res = search(self.wl, self.cfg, recording_ids=[rec_id], indexes=indexes)
+        report(self.wl, self.cfg, res, indexes, self.notifier, not_found=False)
         found = sum(1 for r in res.values() if r["found"])
         job.message = f"{ix.usable} usable faces · " + (f"{found} watchlist {'person' if found == 1 else 'people'} found"
                                                        if found else "nobody from the watchlist")
@@ -211,8 +244,9 @@ class Runtime:
         return self.wl.person(pid)
 
     def search_now(self, pids: list[int] | None = None, not_found: bool = True) -> dict:
-        res = search(self.wl, self.cfg, pids, indexes=self.indexes)
-        report(self.wl, self.cfg, res, self.indexes, self.notifier, not_found=not_found)
+        indexes = self.indexes
+        res = search(self.wl, self.cfg, pids, indexes=indexes)
+        report(self.wl, self.cfg, res, indexes, self.notifier, not_found=not_found)
         return res
 
     def enroll_photos(self, label: str, flag: str, files: list[tuple[str, bytes]], face: int | None = None) -> dict:

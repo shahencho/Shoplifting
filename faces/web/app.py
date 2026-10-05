@@ -128,7 +128,7 @@ def create_app(rt: Runtime, sessions_path: Path = SESSIONS) -> FastAPI:
         tg = rt.telegram
         return {"player": rt.player.status(), "alerts": rt.player.alerts[:5],
                 "jobs": [j.to_dict() for j in reversed(rt.jobs[-8:])], "version": rt.version,
-                "people": len(rt.wl.persons()), "recordings": len(archive.recordings()),
+                "people": len(rt.wl.persons()), "recordings": len(rt.indexes),   # searchable ones
                 "telegram": {"enabled": tg is not None, "link": tg.link if tg else "",
                              "chats": [{"id": c["id"], "name": c["name"]} for c in tg.chats] if tg else []}}
 
