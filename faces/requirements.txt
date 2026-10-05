@@ -1,0 +1,18 @@
+# Face module: its own venv (faces/.venv), separate from theft's and fire's.
+#   py -3.13 -m venv faces/.venv
+#   faces\.venv\Scripts\python -m pip install -r faces/requirements.txt
+insightface>=2.1          # SCRFD + ArcFace (buffalo_l); models are non-commercial without a signed MODEL.LICENSE
+onnxruntime>=1.20
+opencv-python>=4.9
+numpy>=1.26
+pyyaml>=6.0
+requests>=2.31
+pytest>=8.0
+python-dotenv>=1.0
+yt-dlp>=2025.1
+fastapi>=0.110
+uvicorn>=0.29
+python-multipart>=0.0.9   # photo / video uploads
+qrcode>=7.4
+httpx>=0.27               # tests: FastAPI TestClient
+imageio-ffmpeg>=0.5        # ffmpeg for small H.264 clips when the system has none (Windows laptop)

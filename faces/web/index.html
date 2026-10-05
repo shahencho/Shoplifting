@@ -1,0 +1,748 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Repeat Visitor</title>
+<link rel=icon href="data:,">
+<link rel="preconnect" href="https://fonts.googleapis.com"><link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@400;500;600;700&family=Geist+Mono:wght@400;500&display=swap" rel="stylesheet">
+<!-- Styles and icons copied from theft_demo/web/index.html; the faces screens are below them. -->
+<style>
+:root{color-scheme:dark;--bg:#0B0D10;--bar:#0E1115;--card:#13161B;--card2:#1A1E24;--card3:#232830;--ink:#ECEEF1;--ink2:#A3A9B3;
+  --muted:#7C838E;--line:rgba(255,255,255,.07);--line2:rgba(255,255,255,.12);--accent:#FF6B2C;--accent-ink:#FF8A5B;
+  --ok:#3DD68C;--amber:#FFB02E;--blue:#8DB8FF;--bad:#F26B6B;--grey:#A3A9B3;
+  --sans:"Geist",system-ui,-apple-system,"Segoe UI",sans-serif;--mono:"Geist Mono",ui-monospace,Consolas,monospace}
+*{box-sizing:border-box}[hidden]{display:none!important}
+body{margin:0;background:linear-gradient(180deg,#0B0D10,#11151B) fixed;color:var(--ink);font:15px/1.45 var(--sans);min-height:100vh}
+.mono{font-family:var(--mono)}.muted{color:var(--muted)}
+svg.i{width:18px;height:18px;flex:none;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+a,button.link{color:var(--ink2);background:none;border:0;font:inherit;cursor:pointer;padding:0;text-decoration:none}
+
+/* header */
+header{position:sticky;top:0;z-index:5;display:flex;align-items:center;gap:14px;padding:0 20px;height:64px;
+  background:rgba(14,17,21,.85);backdrop-filter:blur(8px);border-bottom:1px solid var(--line)}
+.brand{display:flex;align-items:center;gap:10px;color:var(--ink);font-weight:700;font-size:16px;letter-spacing:-.01em}
+.logo{display:grid;place-items:center;width:34px;height:34px;border-radius:9px;background:var(--accent);color:#0B0D10;
+  box-shadow:0 0 24px rgba(255,107,44,.35)}
+.vsep{width:1px;height:24px;background:var(--line2)}
+.camhdr{display:flex;flex-direction:column;line-height:1.2}.camhdr b{font-size:14px;font-weight:600}
+.camhdr span{font:12px var(--mono);color:var(--muted)}
+header .sp{flex:1}
+nav{display:flex;gap:4px}
+nav a,nav button{display:inline-flex;align-items:center;gap:6px;height:38px;padding:0 12px;border-radius:8px;color:var(--ink2);font-weight:500;font-size:14px}
+nav a:hover,nav button:hover{color:var(--ink);background:rgba(255,255,255,.05)}nav a.on{color:var(--ink);background:var(--card2)}
+.pill{display:inline-flex;align-items:center;gap:8px;height:30px;padding:0 12px;border-radius:999px;font-size:13px;font-weight:600;
+  background:rgba(255,255,255,.05);color:var(--ink2);white-space:nowrap}
+.pill.ok{background:rgba(61,214,140,.1);color:var(--ok)}.pill.bad{background:rgba(242,107,107,.12);color:var(--bad)}
+.pill.wait{background:rgba(255,176,46,.12);color:var(--amber)}
+.pill.demo{background:rgba(141,184,255,.12);color:var(--blue)}
+.dot{width:8px;height:8px;border-radius:50%;background:currentColor;flex:none}
+.pulse{animation:pulse 2s infinite}
+@keyframes pulse{0%{box-shadow:0 0 0 0 currentColor}70%{box-shadow:0 0 0 7px transparent}100%{box-shadow:0 0 0 0 transparent}}
+
+main{max-width:1400px;margin:0 auto;padding:20px}
+.wiz{max-width:1000px;margin:0 auto;padding-top:16px}
+
+/* wizard */
+.card{background:var(--card);border:1px solid var(--line);border-radius:14px;padding:22px}
+.steps{display:flex;align-items:center;gap:10px;margin:0 0 22px;padding:0;list-style:none;font-size:14px;color:var(--muted);overflow-x:auto}
+.steps li{display:flex;align-items:center;gap:8px;white-space:nowrap;font-weight:500}
+.steps li+li::before{content:"";width:28px;height:1px;background:var(--line2);margin-right:2px}
+.steps a{display:flex;align-items:center;gap:8px;color:inherit;padding:6px 8px;margin:-6px -8px;border-radius:8px}.steps a:hover{color:var(--ink);background:rgba(255,255,255,.05)}
+.steps .n{display:grid;place-items:center;width:26px;height:26px;border-radius:50%;border:1px solid var(--line2);font:12px var(--mono)}
+.steps .on{color:var(--ink)}.steps .on .n{background:var(--accent);border-color:var(--accent);color:#0B0D10;font-weight:600}
+.steps .done{color:var(--ink2)}.steps .done .n{background:var(--card3);border-color:transparent;color:var(--ink)}
+h1{font-size:30px;letter-spacing:-.02em;margin:0 0 6px}.sub{color:var(--ink2);margin:0 0 22px}
+h2{font-size:15px;margin:0}
+label{display:block;font-size:13px;color:var(--ink2);margin:14px 0 6px}
+input,select{width:100%;font:inherit;height:44px;padding:0 12px;border:1px solid var(--line2);border-radius:10px;background:var(--bg);color:var(--ink)}
+input:focus,select:focus{outline:2px solid rgba(255,107,44,.6);outline-offset:0;border-color:transparent}
+input::placeholder{color:#5E656F}
+.grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 12px}
+.camgrid{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:20px;align-items:start}
+.or{margin:18px 0 0;color:var(--muted);font-size:13px}
+.note{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;margin:0 0 18px;border-radius:10px;
+  background:rgba(141,184,255,.08);border:1px solid rgba(141,184,255,.25);color:var(--ink2);font-size:14px}
+.note svg{color:var(--blue);margin-top:2px}.note b{color:var(--ink)}
+.hints{margin:14px 0 0;padding:0;list-style:none;font-size:13px;color:var(--muted)}
+.hints li{display:flex;gap:8px;margin-top:6px}.hints li::before{content:"•";color:var(--line2)}
+.btns{display:flex;gap:10px;flex-wrap:wrap;margin-top:20px}
+button.b{font:inherit;font-weight:600;height:44px;padding:0 18px;border-radius:10px;border:1px solid var(--line2);background:transparent;
+  color:var(--ink);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;gap:8px}
+button.b:hover{background:rgba(255,255,255,.05)}
+button.primary{background:var(--accent);border-color:var(--accent);color:#0B0D10}button.primary:hover{background:var(--accent);filter:brightness(1.08)}
+button:disabled{opacity:.5;cursor:default}
+.msg{font-size:14px;margin-top:12px}.msg.bad{color:var(--bad)}.msg.good{color:var(--ok)}
+.preview{position:relative;aspect-ratio:16/9;border-radius:14px;overflow:hidden;border:1px solid var(--line);background-color:#07080A;
+  background-image:linear-gradient(rgba(255,255,255,.025) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.025) 1px,transparent 1px);
+  background-size:40px 40px;display:grid;place-items:center;color:var(--muted);font-size:14px;text-align:center}
+.preview img{position:absolute;inset:0;width:100%;height:100%;object-fit:contain;background:#000}
+.det{display:flex;align-items:center;gap:14px;padding:14px 0;border-bottom:1px solid var(--line)}
+.det:last-of-type{border:0}.det .txt{flex:1}.det small{display:block;color:var(--muted);font-size:13px}
+.det .ic{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:var(--card2);color:var(--ink2)}
+.det .ic.fire{background:rgba(255,107,44,.14);color:var(--accent)}
+.det.soon{opacity:.55}.det.soon .lock{color:var(--muted)}
+.soonhead{margin:22px 0 4px;font:600 12px var(--mono);letter-spacing:.14em;color:var(--muted)}
+.sw{position:relative;width:52px;height:30px;flex:none;margin:0}.sw input{opacity:0;width:0;height:0;position:absolute}
+.sw span{position:absolute;inset:0;background:#2A3140;border-radius:15px;transition:.15s;cursor:pointer}
+.sw span:before{content:"";position:absolute;width:24px;height:24px;left:3px;top:3px;background:#fff;border-radius:50%;transition:.15s}
+.sw input:checked+span{background:var(--accent)}.sw input:checked+span:before{transform:translateX(22px)}
+.sw input:focus-visible+span{outline:2px solid var(--accent);outline-offset:2px}
+.qr{display:flex;gap:22px;align-items:center;flex-wrap:wrap}.qr img{width:190px;height:190px;background:#fff;border-radius:12px;padding:8px}
+.qr a{color:var(--accent-ink);word-break:break-all}
+.linked{list-style:none;margin:8px 0 0;padding:0;display:flex;flex-direction:column;gap:6px}
+.linked li{display:flex;align-items:center;gap:8px;color:var(--ok);font-size:14px}
+.linked button{background:none;border:1px solid var(--line2);color:inherit;opacity:.7;border-radius:8px;min-width:32px;min-height:32px;cursor:pointer;font-size:16px;line-height:1}
+.linked button:hover{opacity:1;color:var(--bad)}
+
+/* live */
+.banner{display:flex;align-items:center;gap:16px;padding:16px 18px;border-radius:14px;background:var(--accent);color:#0B0D10;margin-bottom:18px;
+  animation:bpulse 2s ease-in-out infinite;transition:opacity .4s,filter .4s}
+.banner.amber{background:var(--amber);animation-name:bpulseA}
+@keyframes bpulse{0%,100%{box-shadow:0 0 0 0 rgba(255,107,44,.5),0 10px 40px -12px rgba(255,107,44,.6)}50%{box-shadow:0 0 0 9px rgba(255,107,44,0),0 10px 56px -8px rgba(255,107,44,.85)}}
+@keyframes bpulseA{0%,100%{box-shadow:0 0 0 0 rgba(255,176,46,.5)}50%{box-shadow:0 0 0 9px rgba(255,176,46,0)}}
+.banner.ack{animation:none;opacity:.6;filter:saturate(.5)}
+.banner .bic{display:grid;place-items:center;width:46px;height:46px;border-radius:12px;background:rgba(11,13,16,.14);flex:none}
+.banner .bic svg{width:24px;height:24px}
+.banner .btxt{flex:1;min-width:0}.banner .bt{font-weight:700;font-size:18px;letter-spacing:-.01em}
+.banner .bs{font-size:14px;opacity:.8;font-weight:500;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.banner .bb{display:flex;gap:10px;flex:none}
+.banner button{height:48px;padding:0 18px;border-radius:11px;font:inherit;font-weight:600;cursor:pointer;display:inline-flex;align-items:center;gap:8px;justify-content:center}
+.banner .dark{background:#0B0D10;color:#ECEEF1;border:0}.banner .ghost{background:transparent;color:#0B0D10;border:2px solid rgba(11,13,16,.35)}
+
+.live{display:grid;grid-template-columns:minmax(0,1fr) 420px;gap:20px}
+.video{position:relative;background:#000;border-radius:14px;overflow:hidden;aspect-ratio:16/9;border:1px solid var(--line);
+  box-shadow:0 20px 60px -24px rgba(0,0,0,.9)}
+.video.bad{border-color:transparent;box-shadow:inset 0 0 0 2px rgba(242,107,107,.7)}
+.video img{width:100%;height:100%;object-fit:contain;display:block}
+.ov{position:absolute;display:flex;gap:8px}.ov.tl{top:14px;left:14px}.ov.tr{top:14px;right:14px}
+.badge{display:inline-flex;align-items:center;gap:7px;height:28px;padding:0 10px;border-radius:7px;background:rgba(11,13,16,.7);
+  backdrop-filter:blur(4px);font-size:12px;color:var(--ink2)}
+.badge.live{font-weight:700;letter-spacing:.1em;color:var(--ink)}.badge.live .dot{color:var(--ok)}
+.badge.off{color:var(--bad);font-weight:700;letter-spacing:.1em}
+.ph{position:absolute;inset:0;display:grid;place-items:center;text-align:center;background:rgba(11,13,16,.88);padding:20px}
+.ph .big{font-size:22px;font-weight:600;margin:10px 0 4px}.ph .small{color:var(--ink2);font-size:14px;display:flex;align-items:center;gap:8px;justify-content:center}
+.ph .circ{display:grid;place-items:center;width:56px;height:56px;margin:0 auto;border-radius:50%;background:rgba(255,255,255,.06)}
+.ph.bad .circ{background:rgba(242,107,107,.14);color:var(--bad)}.ph.bad .big{color:#F79B9B}
+.spin{width:16px;height:16px;border:2px solid rgba(255,255,255,.2);border-top-color:currentColor;border-radius:50%;animation:spin .8s linear infinite;flex:none}
+@keyframes spin{to{transform:rotate(360deg)}}
+.rowhead{display:flex;align-items:baseline;justify-content:space-between;margin:16px 0 10px}
+.rowhead h2{font-size:14px;color:var(--ink2);font-weight:600}
+.upd{display:inline-flex;align-items:center;gap:6px;font:12px var(--mono);color:var(--muted)}
+.upd .dot{width:6px;height:6px;color:var(--ok);background:var(--ok)}
+.stats{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px}
+.stat{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px;min-width:0}
+.stat .l{display:flex;justify-content:space-between;gap:6px;font-size:12px;color:var(--muted)}
+.stat .v{font:500 22px var(--mono);font-variant-numeric:tabular-nums;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin-top:2px}
+.stat .v small{font-size:13px;color:var(--muted);margin-left:3px}.stat .v.txt{font-size:15px;padding-top:5px}
+.tr{font-family:var(--mono)}.tr.good{color:var(--ok)}.tr.worse{color:var(--amber)}
+.watch{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:14px;font-size:14px}
+.chipw{display:inline-flex;align-items:center;gap:6px;height:32px;padding:0 12px;border-radius:999px;background:var(--card2);font-weight:500}
+.chipw svg{width:15px;height:15px}.chipw.fire svg{color:var(--accent)}
+
+.counters{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}
+.counters div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.counters span{font-size:12px;color:var(--muted)}.counters b{display:block;font:500 28px var(--mono);font-variant-numeric:tabular-nums}
+.counters .al b{color:var(--accent)}
+.events{position:relative;display:flex;flex-direction:column;gap:12px}
+.events.rail::before{content:"";position:absolute;left:7px;top:18px;bottom:18px;width:2px;border-radius:2px;background:var(--line2)}
+.ev{position:relative;margin-left:26px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:12px;
+  transition:transform .18s,box-shadow .18s,border-color .18s}
+.ev:hover{transform:translateY(-3px);box-shadow:0 14px 34px -12px rgba(0,0,0,.85);border-color:var(--line2)}
+.ev .rd{position:absolute;left:-25px;top:16px;width:12px;height:12px;border-radius:50%;background:var(--grey);box-shadow:0 0 0 4px #0F1318}
+.ev.checking .rd,.ev.watching .rd{background:var(--blue)}.ev.confirmed .rd{background:var(--accent)}.ev.possible .rd,.ev.unverified .rd{background:var(--amber)}
+.ev .top{display:flex;gap:12px}
+.ev .thumb{width:108px;height:61px;border-radius:8px;object-fit:cover;background:#07080A;flex:none;cursor:zoom-in;border:1px solid var(--line)}
+.ev .hd{min-width:0;flex:1}
+.tag{display:inline-block;padding:2px 8px;border-radius:6px;font-size:12px;font-weight:600;margin-right:6px}
+.tag.checking,.tag.watching{background:rgba(141,184,255,.14);color:var(--blue);animation:blink 1.4s ease-in-out infinite}
+.tag.confirmed{background:rgba(255,107,44,.15);color:var(--accent-ink)}
+.tag.possible,.tag.unverified{background:rgba(255,176,46,.14);color:var(--amber)}
+.tag.dismissed,.tag.cleared{background:rgba(163,169,179,.1);color:var(--ink2)}
+@keyframes blink{50%{opacity:.45}}
+.ev .meta{font:12px var(--mono);color:var(--muted)}.ev .note{font-size:13px;color:var(--ink2);margin-top:4px}
+.reason{margin-top:10px;padding:9px 12px;border-radius:9px;background:rgba(255,255,255,.03)}
+.reason .rl{display:flex;align-items:center;gap:5px;font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-bottom:3px}
+.reason .rl svg{width:12px;height:12px;color:var(--accent)}
+.reason p{margin:0;font-size:15px;line-height:1.4;color:var(--ink)}
+.ev .acts{display:flex;gap:6px;flex-wrap:wrap;margin-top:10px}
+.ev .acts button{font:inherit;font-size:12px;font-weight:500;height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line2);
+  background:transparent;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.ev .acts button:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+.ev .acts button.on{background:var(--ink);color:#0B0D10;border-color:var(--ink)}
+.ev .acts svg{width:14px;height:14px}
+.ev video{width:100%;border-radius:8px;margin-top:10px;display:block}
+.empty{text-align:center;padding:34px 20px;background:var(--card);border:1px solid var(--line);border-radius:14px}
+.empty .circ{display:grid;place-items:center;width:48px;height:48px;margin:0 auto 12px;border-radius:50%;background:rgba(61,214,140,.1);color:var(--ok)}
+.empty b{display:block;font-size:17px}.empty span{color:var(--ink2)}
+
+#toasts{position:fixed;top:76px;left:0;right:0;z-index:20;display:flex;flex-direction:column;align-items:center;gap:8px;pointer-events:none;padding:0 16px}
+.toast{display:flex;align-items:center;gap:10px;padding:11px 16px;border-radius:12px;background:#1C2128;border:1px solid var(--line2);
+  box-shadow:0 16px 40px -12px rgba(0,0,0,.8);font-size:14px;font-weight:500;animation:tin .22s ease-out;transition:opacity .3s}
+.toast svg{color:var(--ok)}.toast.out{opacity:0}
+@keyframes tin{from{opacity:0;transform:translateY(-8px)}to{opacity:1;transform:none}}
+dialog{border:0;padding:0;background:transparent;color:var(--ink)}dialog::backdrop{background:rgba(0,0,0,.85)}
+#zoom img{max-width:95vw;max-height:90vh;border-radius:10px;display:block}
+.clipbox{width:min(960px,calc(100vw - 32px));background:var(--card);border:1px solid var(--line2);border-radius:14px;overflow:hidden}
+.cliphead{display:flex;align-items:center;gap:12px;padding:10px 10px 10px 16px;border-bottom:1px solid var(--line)}
+.cliphead .t{flex:1}.cliphead span{display:block;font:12px var(--mono);color:var(--muted)}
+.cliphead button{width:44px;height:44px;border-radius:10px;border:0;background:transparent;color:var(--ink);cursor:pointer;display:grid;place-items:center}
+.cliphead button:hover{background:rgba(255,255,255,.06)}
+.clipbox video{width:100%;display:block;background:#000;max-height:75vh}
+
+.ev .strip{width:100%;border-radius:8px;margin-top:10px;display:block;cursor:zoom-in;border:1px solid var(--line);background:#07080A}
+.ev .stl{font:10px var(--mono);letter-spacing:.14em;color:var(--muted);text-transform:uppercase;margin-top:10px}
+.tline{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin-top:10px;font:12px var(--mono);color:var(--ink2)}
+.tline b{color:var(--ink);font-weight:500}.tline .ar{color:var(--muted)}.tline .hot{color:var(--accent-ink)}
+.timing{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-top:10px}
+.timing div{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:11px 14px}
+.timing span{font-size:12px;color:var(--muted)}.timing b{display:block;font:500 22px var(--mono)}.timing .al b{color:var(--accent)}
+.vidlist{display:flex;flex-direction:column;gap:10px;margin-top:6px}
+.vid{display:flex;gap:12px;align-items:flex-start;padding:12px 14px;border:1px solid var(--line2);border-radius:11px;cursor:pointer}
+.vid:hover{background:rgba(255,255,255,.03)}.vid.on{border-color:var(--accent);background:rgba(255,107,44,.06)}
+.vid input{width:18px;height:18px;margin-top:3px;flex:none;accent-color:var(--accent)}.vid b{display:block}
+.vid small{display:block;color:var(--muted);font-size:13px}.vid.off{opacity:.5;cursor:default}
+@media (max-width:1000px){.live{grid-template-columns:1fr}}
+@media (max-width:820px){.camgrid{grid-template-columns:1fr}.camhdr,.vsep{display:none}}
+@media (max-width:640px){
+  main{padding:14px 16px}header{padding:0 12px;gap:10px}.brand b,nav .t{display:none}
+  .grid2{grid-template-columns:1fr}h1{font-size:24px}.card{padding:18px}
+  .stats{display:flex;overflow-x:auto;scroll-snap-type:x mandatory;margin:0 -16px;padding:0 16px 4px;scrollbar-width:none}
+  .stats::-webkit-scrollbar{display:none}.stat{min-width:140px;scroll-snap-align:start}
+  .banner{flex-wrap:wrap}.banner .bb{width:100%}.banner button{flex:1;height:56px}
+  .btns button.b{flex:1;height:56px}.ov.tl .dim{display:none}.pill .long{display:none}
+}
+@media (prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}}
+/* faces: watchlist, recordings, live replay */
+.tabs{display:inline-flex;gap:4px;padding:4px;border-radius:10px;background:var(--bg);border:1px solid var(--line2);margin-top:14px}
+.tabs label{margin:0;display:inline-flex;align-items:center;height:34px;padding:0 14px;border-radius:7px;cursor:pointer;color:var(--ink2);font-weight:500}
+.tabs input{display:none}.tabs label:has(input:checked){background:var(--card3);color:var(--ink)}
+input[type=file]{height:auto;padding:10px;cursor:pointer}
+.filebtns{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.filebtns .fname{font-size:13px;color:var(--muted)}
+.people{display:flex;flex-direction:column;gap:14px}
+.person{display:grid;grid-template-columns:120px minmax(0,1fr);gap:16px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:16px}
+.person.off{opacity:.55}
+.person .pph{width:120px;height:120px;border-radius:12px;object-fit:cover;background:#07080A;border:1px solid var(--line);cursor:zoom-in}
+.person .ptop{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap}
+.person .pname{font-size:18px;font-weight:600;margin-right:4px}
+.person .psrc{display:block;font:12px var(--mono);color:var(--muted);margin-top:4px}
+.person .pacts{display:flex;align-items:center;gap:8px;margin-left:auto}
+.person .pacts button.b{height:36px;padding:0 12px;font-size:13px}
+.person .sw{width:46px;height:26px}.person .sw span:before{width:20px;height:20px}.person .sw input:checked+span:before{transform:translateX(20px)}
+.flag{display:inline-block;padding:3px 9px;border-radius:999px;font-size:12px;font-weight:600;background:rgba(255,107,44,.14);color:var(--accent-ink)}
+.found{margin-top:12px}
+.found .fh{font-size:14px;color:var(--ink2);margin-bottom:8px}.found .fh b{color:var(--ink)}
+.apps{display:flex;flex-direction:column;gap:8px}
+.app{display:flex;align-items:center;gap:12px;padding:8px;border:1px solid var(--line);border-radius:11px;background:var(--card2);flex-wrap:wrap}
+.app img{width:56px;height:56px;border-radius:8px;object-fit:cover;background:#07080A;cursor:zoom-in}
+.app .at{flex:1;min-width:150px}.app .at b{display:block;font-size:14px}.app .at span{font:12px var(--mono);color:var(--muted)}
+.app .acts{display:flex;gap:6px;flex-wrap:wrap}
+.app .acts button{font:inherit;font-size:12px;font-weight:500;height:32px;padding:0 11px;border-radius:8px;border:1px solid var(--line2);
+  background:transparent;color:var(--ink2);cursor:pointer;display:inline-flex;align-items:center;gap:5px}
+.app .acts button:hover{background:rgba(255,255,255,.05);color:var(--ink)}
+.app .acts button.on{background:var(--ink);color:#0B0D10;border-color:var(--ink)}.app .acts svg{width:14px;height:14px}
+.tag.strong{background:rgba(242,107,107,.16);color:#F79B9B}.tag.possible{background:rgba(255,176,46,.14);color:var(--amber)}
+.reclist{display:flex;flex-direction:column;gap:10px}
+.rec{display:flex;align-items:center;gap:14px;padding:12px 14px;background:var(--card);border:1px solid var(--line);border-radius:12px;flex-wrap:wrap}
+.rec .rt{flex:1;min-width:180px}.rec .rt b{display:block}.rec .rt small{display:block;color:var(--muted);font-size:13px}
+.rec .rs{font-size:13px;color:var(--ink2);display:flex;align-items:center;gap:8px}
+.rec .rs.ok{color:var(--ok)}.rec .rs.wait{color:var(--amber)}.rec .rs.bad{color:var(--bad)}
+.bar{width:120px;height:6px;border-radius:3px;background:var(--card3);overflow:hidden}.bar i{display:block;height:100%;background:var(--amber)}
+.jobs{display:flex;flex-direction:column;gap:6px;font-size:13px}
+.job{display:flex;gap:10px;align-items:center;color:var(--ink2)}.job .mono{color:var(--muted)}
+.job.failed{color:var(--bad)}.job.done{color:var(--ink2)}
+.controls{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-top:12px}
+.controls select{width:auto;min-width:220px;flex:1}
+.controls button.b{height:44px}
+.hint{font-size:13px;color:var(--muted);margin-top:10px}
+.video.clickable img{cursor:crosshair}
+.pop{position:absolute;z-index:3;width:280px;background:var(--card);border:1px solid var(--line2);border-radius:12px;padding:14px;
+  box-shadow:0 16px 40px -12px rgba(0,0,0,.9)}
+.pop label{margin:10px 0 4px}.pop input,.pop select{height:38px}.pop .btns{margin-top:12px}.pop .btns button.b{height:38px;flex:1}
+.pop .msg{margin-top:8px}
+.alertlist{display:flex;flex-direction:column;gap:10px}
+.al{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px}
+.al img{width:100%;border-radius:8px;display:block;cursor:zoom-in}
+.al .ah{display:flex;align-items:center;gap:8px;margin-bottom:8px;font-size:14px;flex-wrap:wrap}.al .ah .when{font:12px var(--mono);color:var(--muted)}
+.al video{width:100%;border-radius:8px;margin-top:8px;display:block}
+@media (max-width:640px){.person{grid-template-columns:72px minmax(0,1fr);padding:12px}.person .pph{width:72px;height:72px}
+  .person .pacts{margin-left:0;width:100%}.controls select{min-width:0;width:100%}.pop{left:8px!important;right:8px;width:auto}}
+</style></head><body>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <symbol id="i-flame" viewBox="0 0 24 24"><path d="M8.5 14.5A2.5 2.5 0 0 0 11 12c0-1.38-.5-2-1-3-1.07-2.14-.22-4.05 2-6 .5 2.5 2 4.9 4 6.5 2 1.6 3 3.5 3 5.5a7 7 0 1 1-14 0c0-1.15.43-2.29 1-3a2.5 2.5 0 0 0 2.5 2.5z"/></symbol>
+  <symbol id="i-smoke" viewBox="0 0 24 24"><path d="M17.7 7.7a2.5 2.5 0 1 1 1.8 4.3H2"/><path d="M9.6 4.6A2 2 0 1 1 11 8H2"/><path d="M12.6 19.4A2 2 0 1 0 14 16H2"/></symbol>
+  <symbol id="i-alert" viewBox="0 0 24 24"><path d="M10.3 3.9 1.8 18a2 2 0 0 0 1.7 3h17a2 2 0 0 0 1.7-3L13.7 3.9a2 2 0 0 0-3.4 0z"/><path d="M12 9v4"/><path d="M12 17h.01"/></symbol>
+  <symbol id="i-play" viewBox="0 0 24 24"><path d="m6 3 14 9-14 9V3z"/></symbol>
+  <symbol id="i-check" viewBox="0 0 24 24"><path d="M20 6 9 17l-5-5"/></symbol>
+  <symbol id="i-x" viewBox="0 0 24 24"><path d="M18 6 6 18M6 6l12 12"/></symbol>
+  <symbol id="i-sparkles" viewBox="0 0 24 24"><path d="M12 3l1.9 5.1L19 10l-5.1 1.9L12 17l-1.9-5.1L5 10l5.1-1.9z"/><path d="M19 17v4M17 19h4"/></symbol>
+  <symbol id="i-wifioff" viewBox="0 0 24 24"><path d="M12 20h.01M8.5 16.4a5 5 0 0 1 7 0M5 12.9a10 10 0 0 1 5.2-2.8M19 12.9a10 10 0 0 0-2-1.5M2 8.8a15 15 0 0 1 4.2-2.7M22 8.8A15 15 0 0 0 11 5.1M2 2l20 20"/></symbol>
+  <symbol id="i-shield" viewBox="0 0 24 24"><path d="M20 13c0 5-3.5 7.5-7.7 9a1 1 0 0 1-.7 0C7.5 20.5 4 18 4 13V6a1 1 0 0 1 1-1c2 0 4.5-1.2 6.2-2.7a1.2 1.2 0 0 1 1.6 0C14.5 3.8 17 5 19 5a1 1 0 0 1 1 1z"/><path d="m9 12 2 2 4-4"/></symbol>
+  <symbol id="i-lock" viewBox="0 0 24 24"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></symbol>
+  <symbol id="i-up" viewBox="0 0 24 24"><path d="M7 10v12M15 5.9 14 10h5.8a2 2 0 0 1 1.9 2.6l-2.3 8A2 2 0 0 1 17.5 22H4a2 2 0 0 1-2-2v-8a2 2 0 0 1 2-2h2.8a2 2 0 0 0 1.8-1.1L12 2a3.1 3.1 0 0 1 3 3.9z"/></symbol>
+  <symbol id="i-down" viewBox="0 0 24 24"><path d="M17 14V2M9 18.1 10 14H4.2a2 2 0 0 1-1.9-2.6l2.3-8A2 2 0 0 1 6.5 2H20a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2h-2.8a2 2 0 0 0-1.8 1.1L12 22a3.1 3.1 0 0 1-3-3.9z"/></symbol>
+  <symbol id="i-cam" viewBox="0 0 24 24"><path d="M16.8 5.1 5.6 11a1 1 0 0 0-.4 1.4l1.5 2.6a1 1 0 0 0 1.4.4L19.4 9.5"/><path d="M3 21h4l2.7-3.7"/><path d="M3 17v4"/><path d="m21 4-4.2-2.4a1 1 0 0 0-1.4.4L14 4.5"/></symbol>
+  <symbol id="i-door" viewBox="0 0 24 24"><path d="M13 4h3a2 2 0 0 1 2 2v14M2 20h3M13 20h9M10 12v.01M13 4.6v16.2a1 1 0 0 1-1.2 1L5 20V5.6a2 2 0 0 1 1.5-2l4-1A2 2 0 0 1 13 4.6z"/></symbol>
+  <symbol id="i-people" viewBox="0 0 24 24"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.9M16 3.1a4 4 0 0 1 0 7.8"/></symbol>
+  <symbol id="i-bag" viewBox="0 0 24 24"><path d="M6 2 3 6v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2V6l-3-4zM3 6h18M16 10a4 4 0 0 1-8 0"/></symbol>
+  <symbol id="i-camoff" viewBox="0 0 24 24"><path d="M2 2l20 20M7 7H4a2 2 0 0 0-2 2v9a2 2 0 0 0 2 2h16M9.5 4h5L17 7h3a2 2 0 0 1 2 2v7.5"/><path d="M14.1 14.1A3 3 0 1 1 9.9 9.9"/></symbol>
+  <symbol id="i-live" viewBox="0 0 24 24"><path d="M22 12h-4l-3 9L9 3l-3 9H2"/></symbol>
+  <symbol id="i-gear" viewBox="0 0 24 24"><path d="M12.2 2h-.4a2 2 0 0 0-2 2v.2a2 2 0 0 1-1 1.7l-.4.3a2 2 0 0 1-2 0l-.2-.1a2 2 0 0 0-2.7.7l-.2.4a2 2 0 0 0 .7 2.7l.2.1a2 2 0 0 1 1 1.7v.5a2 2 0 0 1-1 1.7l-.2.1a2 2 0 0 0-.7 2.7l.2.4a2 2 0 0 0 2.7.7l.2-.1a2 2 0 0 1 2 0l.4.3a2 2 0 0 1 1 1.7v.2a2 2 0 0 0 2 2h.4a2 2 0 0 0 2-2v-.2a2 2 0 0 1 1-1.7l.4-.3a2 2 0 0 1 2 0l.2.1a2 2 0 0 0 2.7-.7l.2-.4a2 2 0 0 0-.7-2.7l-.2-.1a2 2 0 0 1-1-1.7v-.5a2 2 0 0 1 1-1.7l.2-.1a2 2 0 0 0 .7-2.7l-.2-.4a2 2 0 0 0-2.7-.7l-.2.1a2 2 0 0 1-2 0l-.4-.3a2 2 0 0 1-1-1.7V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/></symbol>
+  <symbol id="i-out" viewBox="0 0 24 24"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/></symbol>
+  <symbol id="i-user" viewBox="0 0 24 24"><circle cx="12" cy="8" r="4"/><path d="M4 21v-1a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v1"/></symbol>
+  <symbol id="i-film" viewBox="0 0 24 24"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="M7 4v16M17 4v16M2 9h5M2 15h5M17 9h5M17 15h5"/></symbol>
+  <symbol id="i-bell" viewBox="0 0 24 24"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9M10.3 21a1.9 1.9 0 0 0 3.4 0"/></symbol>
+  <symbol id="i-search" viewBox="0 0 24 24"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></symbol>
+  <symbol id="i-trash" viewBox="0 0 24 24"><path d="M3 6h18M8 6V4h8v2M19 6l-1 14H6L5 6"/></symbol>
+  <symbol id="i-pause" viewBox="0 0 24 24"><path d="M8 5v14M16 5v14"/></symbol>
+</defs></svg>
+
+<header>
+  <a class=brand href="#watchlist"><span class=logo><svg class=i><use href="#i-user"/></svg></span><b>Repeat Visitor</b></a>
+  <span class=vsep></span>
+  <span id=hdrstate class=pill><span class=dot></span></span>
+  <span class=sp></span>
+  <nav>
+    <a href="#watchlist" data-nav=watchlist aria-label=Watchlist><svg class=i><use href="#i-people"/></svg><span class=t>Watchlist</span></a>
+    <a href="#recordings" data-nav=recordings aria-label=Recordings><svg class=i><use href="#i-film"/></svg><span class=t>Recordings</span></a>
+    <a href="#live" data-nav=live aria-label=Live><svg class=i><use href="#i-live"/></svg><span class=t>Live</span></a>
+    <a href="#alerts" data-nav=alerts aria-label=Alerts><svg class=i><use href="#i-bell"/></svg><span class=t>Alerts</span></a>
+    <button class=link id=logout aria-label="Log out"><svg class=i><use href="#i-out"/></svg><span class=t>Log out</span></button>
+  </nav>
+</header>
+<main id=app></main>
+<div id=toasts></div>
+<dialog id=zoom><img alt=""></dialog>
+
+<template id=t-watchlist><div>
+  <div class=card>
+    <h2>Add a person</h2>
+    <p class=sub style="margin:4px 0 0;font-size:14px">A photo (from a third party, or a selfie) or a short clip. The saved recordings are searched at once and Telegram gets the result.</p>
+    <div class=grid2>
+      <div><label for=w-label>Name or label</label><input id=w-label placeholder="e.g. Shahen" maxlength=60 autocomplete=off></div>
+      <div><label for=w-flag>Flag</label><select id=w-flag><option value=suspicious>Suspicious</option>
+        <option value="theft suspect">Theft suspect</option><option value=banned>Banned</option></select></div>
+    </div>
+    <div class=tabs><label><input type=radio name=w-kind value=photos checked>Photos</label><label><input type=radio name=w-kind value=clip>Clip</label></div>
+    <label for=w-file id=w-filelabel>1–5 photos with the face clearly visible</label>
+    <div class=filebtns><input id=w-file type=file accept="image/*" multiple style="flex:1;min-width:220px">
+      <button class=b id=w-selfie type=button>Take a selfie</button><input id=w-cam type=file accept="image/*" capture=user hidden></div>
+    <div class=btns><button class="b primary" id=w-add>Add and search</button></div>
+    <div class=msg id=w-msg></div>
+  </div>
+  <div class=rowhead><h2>Watchlist</h2><span class=upd id=w-count></span></div>
+  <div class=people id=w-people></div>
+</div></template>
+
+<template id=t-recordings><div>
+  <div class=card>
+    <h2>Add a recording</h2>
+    <p class=sub style="margin:4px 0 0;font-size:14px">A video from any camera or phone, or a YouTube link. Faces are found in the background, then the recording is checked against the whole watchlist.</p>
+    <div class=grid2>
+      <div><label for=r-file>Video file</label><input id=r-file type=file accept="video/*"></div>
+      <div><label for=r-title>Title (shown in alerts)</label><input id=r-title placeholder="e.g. Store B entrance, 5 Oct" maxlength=80></div>
+    </div>
+    <div class=btns><button class="b primary" id=r-upload>Upload</button></div>
+    <label for=r-url>Or a link</label>
+    <div class=filebtns><input id=r-url placeholder="https://www.youtube.com/watch?v=..." style="flex:1;min-width:220px"><button class=b id=r-link>Add link</button></div>
+    <div class=msg id=r-msg></div>
+  </div>
+  <div class=rowhead><h2>Recordings</h2><span class=upd id=r-count></span></div>
+  <div class=reclist id=r-list></div>
+  <div class=rowhead><h2>Recent jobs</h2></div>
+  <div class=jobs id=r-jobs></div>
+</div></template>
+
+<template id=t-live><div>
+  <div id=l-banner></div>
+  <div class=live>
+    <section style="min-width:0">
+      <div class=video id=l-video><img id=l-img alt="recording played as a camera">
+        <div class=ph id=l-ph><div><div class=circ id=l-phic></div><div class=big id=l-phbig></div><div class=small id=l-phsmall></div></div></div>
+        <div class="ov tl"><span class="badge live" id=l-badge></span><span class="badge dim" id=l-cam></span></div>
+        <div class="ov tr"><span class="badge mono" id=l-time></span></div>
+        <div class=pop id=l-pop hidden></div>
+      </div>
+      <div class=controls>
+        <select id=l-rec aria-label=Recording></select>
+        <button class="b primary" id=l-play>Play from the start</button>
+        <button class=b id=l-pause>Pause</button>
+      </div>
+      <p class=hint>Pause and click a face to put that person on the watchlist. Boxes: <span style="color:var(--bad)">red</span> = on the watchlist,
+        white = a usable face, grey = too small, blurry or turned away.</p>
+    </section>
+    <aside style="min-width:0">
+      <div class=rowhead><h2>Alerts while playing</h2><span class=upd>newest first</span></div>
+      <div class=alertlist id=l-alerts></div>
+      <div class=rowhead><h2>Watchlist in this recording</h2><span class=upd>from the search</span></div>
+      <div class=apps id=l-apps></div>
+    </aside>
+  </div>
+</div></template>
+
+<template id=t-alerts><div class=wiz>
+  <h1>Get alerts on Telegram</h1><p class=sub>Scan the code with your phone, open the bot in Telegram and press <b>Start</b>. Already chatted with this bot? Then Telegram shows no Start button: type <b>/start</b> and send it. To stop alerts, press × here or send <b>/stop</b> to the bot.</p>
+  <div class=card>
+    <div class=qr><img id=a-qr alt="Telegram QR code"><div><a id=a-link target=_blank></a><div id=a-linked class=msg></div></div></div>
+    <div class=btns><button class=b id=a-test>Send test alert</button></div>
+    <div class=msg id=a-msg></div>
+  </div>
+</div></template>
+
+<script>
+const $ = s => document.querySelector(s);
+const api = async (url, body, method) => {
+  const r = await fetch(url, body === undefined && !method ? {} : {method: method || "POST", headers:{"Content-Type":"application/json"}, body: JSON.stringify(body || {})});
+  if (r.status === 401){ location.reload(); throw new Error("login"); }
+  const j = await r.json().catch(() => ({}));
+  if (!r.ok) throw new Error(j.detail || r.statusText);
+  return j;
+};
+// uploads with progress (fetch can't report it): photos and videos from a phone can take a while
+const upload = (url, form, onProgress) => new Promise((resolve, reject) => {
+  const x = new XMLHttpRequest();
+  x.open("POST", url);
+  x.upload.onprogress = e => e.lengthComputable && onProgress && onProgress(e.loaded / e.total);
+  x.onload = () => { let j = {}; try { j = JSON.parse(x.responseText); } catch(e){}
+    if (x.status === 401){ location.reload(); return reject(new Error("login")); }
+    if (x.status === 413) return reject(new Error("The file is too large for the server"));
+    x.status < 300 ? resolve(j) : reject(new Error(j.detail || x.statusText)); };
+  x.onerror = () => reject(new Error("Upload failed: check the connection"));
+  x.send(form);
+});
+const esc = s => String(s ?? "").replace(/[&<>"']/g, c => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
+const icon = (name, cls = "i") => `<svg class="${cls}"><use href="#i-${name}"/></svg>`;
+const mmss = s => `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
+const BAND = {strong: "Strong match", possible: "Possible match"};
+let S = null, P = null, R = null, screen = null;
+
+function toast(text){
+  const t = document.createElement("div");
+  t.className = "toast"; t.setAttribute("role", "status");
+  t.innerHTML = icon("check") + `<span>${esc(text)}</span>`;
+  $("#toasts").appendChild(t);
+  setTimeout(() => { t.classList.add("out"); setTimeout(() => t.remove(), 300); }, 2600);
+}
+const setMsg = (sel, text, ok) => { const m = $(sel); if (m){ m.textContent = text; m.className = "msg " + (ok ? "good" : "bad"); } };
+
+async function refresh(){
+  try { S = await api("/api/state"); } catch(e){ return; }
+  const running = S.jobs.find(j => j.state === "running"), pl = S.player;
+  const [cls, txt] = running ? ["wait", `${running.kind === "download" ? "Downloading" : running.kind === "enroll" ? "Enrolling" : "Finding faces"}${running.progress ? " " + Math.round(running.progress * 100) + "%" : "…"}`]
+                   : pl.state === "playing" ? ["ok", "Playing"] : ["", "Ready"];
+  $("#hdrstate").className = "pill " + cls;
+  $("#hdrstate").innerHTML = `<span class="dot ${cls === "ok" ? "pulse" : ""}"></span><span>${esc(txt)}</span>`;
+  if (screen === "watchlist" || screen === "live") await loadPeople();
+  if (screen === "recordings"){ await loadRecordings(); drawJobs(); }
+  if (screen === "live") drawLive();
+  if (screen === "alerts") drawLinked();
+}
+
+function show(name){
+  screen = name;
+  $("#app").innerHTML = ""; $("#app").appendChild($("#t-" + name).content.cloneNode(true));
+  document.querySelectorAll("[data-nav]").forEach(a => a.classList.toggle("on", a.dataset.nav === name));
+  ({watchlist: initWatchlist, recordings: initRecordings, live: initLive, alerts: initAlerts})[name]();
+}
+function route(){
+  const h = location.hash.slice(1);
+  if (["watchlist", "recordings", "live", "alerts"].includes(h)) return show(h);
+  location.hash = "watchlist";
+}
+
+// --- watchlist ---
+async function loadPeople(){
+  try { P = await api("/api/people"); } catch(e){ return; }
+  if (screen === "watchlist") drawPeople();
+}
+function appRow(a, who){
+  return `<div class=app>
+    <img src="/api/appearances/${a.id}/face.jpg" alt="face found" data-zoom loading=lazy>
+    <div class=at><b>${esc(who ? who + " · " : "")}${esc(a.title)}</b><span>${mmss(a.start)}–${mmss(a.end)}</span></div>
+    <span class="tag ${a.band}">${BAND[a.band]}</span>
+    <div class=acts><button data-playat="${esc(a.recording)}" data-t="${Math.max(0, a.start - 2)}">${icon("play")}Play from here</button>
+      <button data-fb=confirm data-a=${a.id} class="${a.feedback === "confirm" ? "on" : ""}">${icon("check")}Confirm</button>
+      <button data-fb=wrong data-a=${a.id} class="${a.feedback === "wrong" ? "on" : ""}">${icon("x")}Wrong person</button></div></div>`;
+}
+function drawPeople(){
+  const box = $("#w-people");
+  if (!box || !P) return;
+  const sig = JSON.stringify([P, S && S.recordings]);
+  if (box.dataset.sig === sig) return;          // unchanged: keep the page still under the user's finger
+  box.dataset.sig = sig;
+  $("#w-count").textContent = `${P.length} ${P.length === 1 ? "person" : "people"} · ${S ? S.recordings : 0} recordings`;
+  if (!P.length){
+    box.innerHTML = `<div class=empty><div class=circ>${icon("user")}</div><b>Nobody on the watchlist yet.</b><span>Add a photo above.</span></div>`;
+    return;
+  }
+  const n = S ? S.recordings : 0;
+  box.innerHTML = P.map(p => {
+    const apps = p.appearances;
+    const head = !p.active ? "Switched off: not searched, no alerts"
+               : apps.length ? `Seen in <b>${p.recordings_found}</b> of ${n} recording${n === 1 ? "" : "s"}`
+               : `Not found in ${n} recording${n === 1 ? "" : "s"}`;
+    return `<article class="person ${p.active ? "" : "off"}">
+      ${p.photo ? `<img class=pph src="/crops/${esc(p.photo)}" alt="watchlist photo" data-zoom>` : `<div class=pph></div>`}
+      <div style="min-width:0">
+        <div class=ptop><div><span class=pname>${esc(p.label)}</span> <span class=flag>${esc(p.flag)}</span>
+            <span class=psrc>${esc(p.source)} · added ${esc(p.created.replace("T", " ").slice(0, 16))} · ${p.faces} face${p.faces === 1 ? "" : "s"}</span></div>
+          <div class=pacts><label class=sw title="${p.active ? "On: searched, alerts sent" : "Off"}"><input type=checkbox data-active=${p.id} ${p.active ? "checked" : ""} aria-label="Watch ${esc(p.label)}"><span></span></label>
+            <button class=b data-search=${p.id} ${p.active ? "" : "disabled"}>${icon("search")}Search again</button>
+            <button class=b data-del=${p.id} data-name="${esc(p.label)}" aria-label="Delete ${esc(p.label)}">${icon("trash")}</button></div></div>
+        <div class=found><div class=fh>${head}</div><div class=apps>${apps.map(a => appRow(a)).join("")}</div></div>
+      </div></article>`;
+  }).join("");
+}
+function initWatchlist(){
+  let picked = null;
+  const kind = () => document.querySelector("input[name=w-kind]:checked").value;
+  document.querySelectorAll("input[name=w-kind]").forEach(r => r.onchange = () => {
+    const photos = kind() === "photos";
+    $("#w-file").accept = photos ? "image/*" : "video/*"; $("#w-file").multiple = photos; $("#w-file").value = "";
+    $("#w-filelabel").textContent = photos ? "1–5 photos with the face clearly visible" : "A short clip (10–60 s) where the person is seen most";
+    $("#w-selfie").hidden = !photos; picked = null;
+  });
+  $("#w-selfie").onclick = () => $("#w-cam").click();
+  $("#w-cam").onchange = e => { if (e.target.files.length){ picked = e.target.files; setMsg("#w-msg", "Selfie ready: press Add and search", true); } };
+  $("#w-file").onchange = () => picked = null;
+  $("#w-add").onclick = async () => {
+    const label = $("#w-label").value.trim(), k = kind(), files = picked || $("#w-file").files;
+    if (!label) return setMsg("#w-msg", "Give the person a name or label", false);
+    if (!files.length) return setMsg("#w-msg", k === "photos" ? "Choose 1–5 photos or take a selfie" : "Choose a video clip", false);
+    const fd = new FormData();
+    fd.append("label", label); fd.append("flag", $("#w-flag").value);
+    if (k === "photos") [...files].slice(0, 5).forEach(f => fd.append("files", f)); else fd.append("file", files[0]);
+    const btn = $("#w-add"); btn.disabled = true;
+    setMsg("#w-msg", "Uploading…", true);
+    try {
+      const r = await upload(k === "photos" ? "/api/people/photos" : "/api/people/clip", fd,
+                             p => setMsg("#w-msg", p < 1 ? `Uploading ${Math.round(p * 100)}%` : "Finding the face…", true));
+      setMsg("#w-msg", k === "photos" ? `Enrolled ✓ ${r.label}: ${r.faces} good face${r.faces === 1 ? "" : "s"}. Searching the recordings; Telegram gets the result.`
+                                      : `Clip received: finding ${label} in it, then searching (Recordings → Recent jobs).`, true);
+      $("#w-label").value = ""; $("#w-file").value = ""; picked = null;
+      await refresh();
+    } catch(e){ setMsg("#w-msg", e.message, false); }
+    finally { btn.disabled = false; }
+  };
+  drawPeople(); loadPeople();
+}
+
+// --- recordings ---
+async function loadRecordings(){
+  try { R = await api("/api/recordings"); } catch(e){ return; }
+  drawRecordings();
+}
+function drawRecordings(){
+  const box = $("#r-list");
+  if (!box || !R) return;
+  const sig = JSON.stringify(R);
+  if (box.dataset.sig === sig) return;
+  box.dataset.sig = sig;
+  $("#r-count").textContent = `${R.length} recording${R.length === 1 ? "" : "s"} · ${R.filter(r => r.indexed).length} searchable`;
+  box.innerHTML = R.map(r => {
+    const j = r.job;
+    const st = j ? (j.state === "failed" ? `<span class="rs bad">${esc(j.message)}</span>`
+                 : `<span class="rs wait"><span class=bar><i style="width:${Math.round(j.progress * 100)}%"></i></span>${esc(j.message || "waiting")}</span>`)
+             : r.indexed ? `<span class="rs ${r.usable ? "ok" : ""}">${r.usable ? `✓ ${r.usable} usable faces` : "no usable faces (too small or turned away)"}</span>`
+             : `<span class=rs>not searchable yet</span>`;
+    return `<div class=rec><div class=rt><b>${esc(r.title)}</b><small>${mmss(r.duration)} · ${r.height}p</small></div>
+      ${st}<button class=b data-playat="${esc(r.id)}" data-t=0 ${r.indexed ? "" : "disabled"}>${icon("play")}Play</button></div>`;
+  }).join("") || `<div class=empty><b>No recordings yet.</b><span>Upload a video above.</span></div>`;
+}
+function drawJobs(){
+  const box = $("#r-jobs");
+  if (!box) return;
+  box.innerHTML = S.jobs.length ? S.jobs.map(j => `<div class="job ${j.state}"><span class=mono>${esc(j.created)}</span>
+      <span>${esc({index: "Recording", download: "Link", enroll: "Clip enrollment"}[j.kind] || j.kind)}: <b>${esc(j.title)}</b></span>
+      <span>${esc(j.state === "running" ? `${Math.round(j.progress * 100)}% · ${j.message}` : j.state === "queued" ? "waiting" : j.message || j.state)}</span></div>`).join("")
+    : `<span class=muted>Nothing yet.</span>`;
+}
+function initRecordings(){
+  $("#r-upload").onclick = async () => {
+    const f = $("#r-file").files[0];
+    if (!f) return setMsg("#r-msg", "Choose a video file", false);
+    const fd = new FormData(); fd.append("file", f); fd.append("title", $("#r-title").value.trim());
+    const btn = $("#r-upload"); btn.disabled = true;
+    try {
+      await upload("/api/recordings/upload", fd, p => setMsg("#r-msg", `Uploading ${Math.round(p * 100)}%`, true));
+      setMsg("#r-msg", "Uploaded. Finding faces in the background; then it is checked against the watchlist.", true);
+      $("#r-file").value = ""; $("#r-title").value = ""; await refresh();
+    } catch(e){ setMsg("#r-msg", e.message, false); }
+    finally { btn.disabled = false; }
+  };
+  $("#r-link").onclick = async () => {
+    try { await api("/api/recordings/link", {url: $("#r-url").value.trim(), title: $("#r-title").value.trim()});
+      setMsg("#r-msg", "Downloading in the background.", true); $("#r-url").value = ""; await refresh(); }
+    catch(e){ setMsg("#r-msg", e.message, false); }
+  };
+  loadRecordings(); if (S) drawJobs();
+}
+
+// --- live (replay) ---
+let imgOk = false, seenAlert = null;
+async function initLive(){
+  const img = $("#l-img");
+  imgOk = false;
+  img.onload = () => { imgOk = true; drawLive(); };
+  img.onerror = () => { imgOk = false; setTimeout(() => img.src = "/live.mjpg?" + Date.now(), 3000); };
+  img.src = "/live.mjpg";
+  try { R = await api("/api/recordings"); } catch(e){}
+  const sel = $("#l-rec");
+  sel.innerHTML = (R || []).filter(r => r.indexed).map(r => `<option value="${esc(r.id)}">${esc(r.title)}</option>`).join("");
+  if (S && S.player.recording) sel.value = S.player.recording;
+  $("#l-play").onclick = () => play(sel.value, 0);
+  $("#l-pause").onclick = async () => { await api(S.player.state === "playing" ? "/api/player/pause" : "/api/player/resume", {}); await refresh(); };
+  img.onclick = whereClicked;
+  seenAlert = S && S.alerts[0] ? S.alerts[0].dir : null;       // only alerts from now on get the banner
+  drawLive();
+}
+async function play(rec, t){
+  try { await api("/api/player/play", {recording: rec, t}); if (location.hash !== "#live") location.hash = "live"; else await refresh(); }
+  catch(e){ toast("Could not play: " + e.message); }
+}
+function frameXY(ev, img){
+  const r = img.getBoundingClientRect(), nw = img.naturalWidth, nh = img.naturalHeight;
+  if (!nw || !nh) return null;
+  const s = Math.min(r.width / nw, r.height / nh), dw = nw * s, dh = nh * s;
+  const x = (ev.clientX - r.left - (r.width - dw) / 2) / dw, y = (ev.clientY - r.top - (r.height - dh) / 2) / dh;
+  return x < 0 || x > 1 || y < 0 || y > 1 ? null : {x, y, px: ev.clientX - r.left, py: ev.clientY - r.top};
+}
+const REASON = {small: "too small", "low score": "unclear", turned: "turned away", tilted: "looking up or down", blurry: "blurry"};
+async function whereClicked(ev){
+  const pop = $("#l-pop");
+  if (S.player.state !== "paused"){ toast(S.player.state === "playing" ? "Pause first, then click a face" : "Play a recording first"); return; }
+  const at = frameXY(ev, $("#l-img"));
+  if (!at) return;
+  let w;
+  try { w = await api("/api/player/where", {x: at.x, y: at.y}); } catch(e){ pop.hidden = true; toast(e.message); return; }
+  const box = $("#l-video").getBoundingClientRect();
+  pop.style.left = Math.min(Math.max(8, at.px - 140), box.width - 288) + "px";
+  pop.style.top = Math.min(at.py + 12, box.height - 60) + "px";
+  pop.hidden = false;
+  if (w.pid){ pop.innerHTML = `<b>Already on the watchlist.</b><div class=btns><button class=b data-popclose>OK</button></div>`; return; }
+  if (!w.ok){ pop.innerHTML = `<b>This face is ${esc(REASON[w.reason] || w.reason)}.</b><p class=muted style="margin:6px 0 0;font-size:13px">Play on and pause where the face is bigger and turned to the camera.</p>
+    <div class=btns><button class=b data-popclose>OK</button></div>`; return; }
+  pop.innerHTML = `<b>Add this person to the watchlist</b>
+    <label for=p-label>Name or label</label><input id=p-label maxlength=60 autocomplete=off placeholder="e.g. Man in the red cap">
+    <label for=p-flag>Flag</label><select id=p-flag><option value=suspicious>Suspicious</option><option value="theft suspect">Theft suspect</option><option value=banned>Banned</option></select>
+    <div class=btns><button class=b data-popclose>Cancel</button><button class="b primary" id=p-add>Add and search</button></div><div class=msg id=p-msg></div>`;
+  $("#p-label").focus();
+  $("#p-add").onclick = async () => {
+    const label = $("#p-label").value.trim();
+    if (!label) return setMsg("#p-msg", "Give the person a name or label", false);
+    $("#p-add").disabled = true;
+    try { const p = await api("/api/people/click", {x: at.x, y: at.y, label, flag: $("#p-flag").value});
+      pop.hidden = true; toast(`${p.label} added: searching the recordings`); await refresh(); }
+    catch(e){ $("#p-add").disabled = false; setMsg("#p-msg", e.message, false); }
+  };
+}
+function drawLive(){
+  if (!$("#l-video") || !S) return;
+  const pl = S.player;
+  const ph = $("#l-ph");
+  ph.hidden = imgOk && ["playing", "paused"].includes(pl.state);
+  if (!ph.hidden){
+    $("#l-phic").innerHTML = icon(pl.state === "ended" ? "check" : "film");
+    $("#l-phbig").textContent = pl.state === "ended" ? "Recording ended" : pl.recording ? "Starting…" : "Choose a recording and press Play";
+    $("#l-phsmall").textContent = pl.state === "ended" ? "Press Play to watch it again" : "";
+  }
+  $("#l-badge").className = "badge " + (pl.state === "playing" ? "live" : "");
+  $("#l-badge").innerHTML = pl.state === "playing" ? `<span class="dot pulse"></span>PLAYING` : pl.state === "paused" ? "PAUSED · click a face" : "";
+  $("#l-badge").hidden = !["playing", "paused"].includes(pl.state);
+  $("#l-cam").textContent = pl.title || ""; $("#l-cam").hidden = !pl.title;
+  $("#l-time").textContent = pl.recording ? `${mmss(pl.t)} / ${mmss(pl.duration)}` : "";
+  $("#l-pause").innerHTML = pl.state === "paused" ? `${icon("play")}Resume` : `${icon("pause")}Pause`;
+  $("#l-pause").disabled = !["playing", "paused"].includes(pl.state);
+  $("#l-video").classList.toggle("clickable", pl.state === "paused");
+  if (pl.state !== "paused") $("#l-pop").hidden = true;
+  // alerts while playing
+  const box = $("#l-alerts"), sig = JSON.stringify(S.alerts);
+  if (box.dataset.sig !== sig){
+    box.dataset.sig = sig;
+    box.innerHTML = S.alerts.length ? S.alerts.map(a => `<div class=al><div class=ah><span class="tag ${a.band}">${BAND[a.band]}</span>
+        <b>${esc(a.person.label)}</b><span class=when>${esc(a.title)} · ${mmss(a.t)} · ${esc(a.time)}</span></div>
+        <img src="/files/replay/${esc(a.dir)}/${esc(a.image)}" alt="watchlist photo and face found" data-zoom>
+        ${a.clip ? `<video src="/files/replay/${esc(a.dir)}/${esc(a.clip)}" controls muted playsinline preload=metadata></video>` : ""}</div>`).join("")
+      : `<div class=empty><div class=circ>${icon("shield")}</div><b>No alerts yet.</b><span>When someone on the watchlist appears, it shows here and on Telegram.</span></div>`;
+  }
+  // banner: a new alert since this page opened
+  const a = S.alerts[0], bn = $("#l-banner");
+  if (a && a.dir !== seenAlert && bn.dataset.dir !== a.dir){
+    bn.dataset.dir = a.dir;
+    const chats = S.telegram.chats.length;
+    bn.innerHTML = `<div class="banner ${a.band === "strong" ? "" : "amber"}" role=alert><span class=bic>${icon("user")}</span>
+      <div class=btxt><div class=bt>${a.band === "strong" ? "STRONG MATCH" : "POSSIBLE MATCH"} · ${esc(a.person.label)} (${esc(a.person.flag)})</div>
+        <div class=bs>${esc(a.title)} at ${mmss(a.t)} · ${chats ? `sent to ${chats} Telegram chat${chats === 1 ? "" : "s"}` : "Telegram: nobody linked"}</div></div>
+      <div class=bb><button class=dark data-bannerclose>OK</button></div></div>`;
+  }
+  // watchlist appearances in this recording (from the search)
+  const apps = (P || []).flatMap(p => p.appearances.filter(x => x.recording === pl.recording).map(x => [p, x]));
+  const abox = $("#l-apps"), asig = JSON.stringify([pl.recording, apps.map(([p, x]) => [x.id, x.feedback])]);
+  if (abox.dataset.sig !== asig){
+    abox.dataset.sig = asig;
+    abox.innerHTML = apps.length ? apps.map(([p, x]) => appRow(x, p.label)).join("")
+      : `<span class=muted style="font-size:14px">${pl.recording ? "Nobody from the watchlist found in this recording." : ""}</span>`;
+  }
+}
+
+// --- alerts (Telegram) ---
+function drawLinked(){
+  const t = S.telegram, el = $("#a-linked");
+  if (!el) return;
+  if (!t.enabled){ el.textContent = "Telegram bot is not configured on the server (TELEGRAM_BOT_TOKEN in faces/.env)."; el.className = "msg bad"; return; }
+  const sig = JSON.stringify(t.chats);
+  if (el.dataset.sig === sig) return;
+  el.dataset.sig = sig;
+  el.className = "msg " + (t.chats.length ? "good" : "");
+  el.innerHTML = t.chats.length
+    ? `<ul class=linked>${t.chats.map(c => `<li>✓ Linked as ${esc(c.name)}<button data-unlink="${esc(c.id)}" data-name="${esc(c.name)}" title="Unlink ${esc(c.name)}" aria-label="Unlink ${esc(c.name)}">×</button></li>`).join("")}</ul>`
+    : "Waiting for Start…";
+}
+function initAlerts(){
+  const t = S.telegram;
+  if (t.enabled && t.link){ $("#a-qr").src = "/api/telegram/qr.png"; $("#a-link").href = t.link; $("#a-link").textContent = t.link; }
+  else $("#a-qr").hidden = true;
+  drawLinked();
+  $("#a-linked").onclick = async ev => {
+    const b = ev.target.closest("[data-unlink]");
+    if (!b || !confirm(`Unlink ${b.dataset.name}? They will stop getting watchlist alerts.`)) return;
+    b.disabled = true;
+    try { await api("/api/telegram/unlink", {id: Number(b.dataset.unlink)}); await refresh(); toast(`Unlinked ${b.dataset.name}`); }
+    catch(e){ b.disabled = false; setMsg("#a-msg", e.message, false); }
+  };
+  $("#a-test").onclick = async () => { try { await api("/api/telegram/test", {}); setMsg("#a-msg", "Test alert sent. Check your phone.", true); }
+                                       catch(e){ setMsg("#a-msg", e.message, false); } };
+}
+
+// --- clicks anywhere ---
+document.addEventListener("click", async ev => {
+  const t = ev.target.closest("button, img[data-zoom], dialog, input[data-active]") || ev.target;
+  if (t.dataset.playat !== undefined) return play(t.dataset.playat, Number(t.dataset.t || 0));
+  if (t.dataset.fb){
+    const a = (P || []).flatMap(p => p.appearances).find(x => x.id === +t.dataset.a);
+    const v = a && a.feedback === t.dataset.fb ? "" : t.dataset.fb;
+    try { await api(`/api/appearances/${t.dataset.a}/feedback`, {value: v}); await loadPeople(); if (screen === "live") drawLive();
+      if (v) toast(v === "confirm" ? "Marked as the same person" : "Marked as a wrong match"); } catch(e){ toast(e.message); }
+  }
+  if (t.dataset.active !== undefined){
+    try { await api(`/api/people/${t.dataset.active}/active`, {active: t.checked}); await loadPeople(); toast(t.checked ? "Watching again" : "Switched off"); }
+    catch(e){ toast(e.message); }
+  }
+  if (t.dataset.search){
+    t.disabled = true;
+    try { const r = await api(`/api/people/${t.dataset.search}/search`, {}); await loadPeople();
+      toast(r.found ? `Found in ${r.found} of ${r.searched} recordings: sent to Telegram` : `Not found in ${r.searched} recordings`); }
+    catch(e){ toast(e.message); } finally { t.disabled = false; }
+  }
+  if (t.dataset.del && confirm(`Delete ${t.dataset.name} from the watchlist? Photos and results are removed.`)){
+    try { await api(`/api/people/${t.dataset.del}`, undefined, "DELETE"); await loadPeople(); toast(`Deleted ${t.dataset.name}`); }
+    catch(e){ toast(e.message); }
+  }
+  if (t.dataset.popclose !== undefined) $("#l-pop").hidden = true;
+  if (t.dataset.bannerclose !== undefined) $("#l-banner").innerHTML = "";
+  if (t.dataset.zoom !== undefined && t.src){ $("#zoom img").src = t.src; $("#zoom").showModal(); }
+  if (t.id === "zoom" || (t.closest && t.closest("#zoom"))) $("#zoom").close();
+});
+$("#logout").onclick = async () => { await api("/api/logout", {}); location.reload(); };
+addEventListener("hashchange", route);
+(async () => { await refresh(); route(); setInterval(refresh, 2000); })();
+</script></body></html>

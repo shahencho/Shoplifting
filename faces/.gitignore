@@ -1,0 +1,12 @@
+# Face module ignores (the root .gitignore is not edited, same rule as fire/ and theft_demo/).
+# The repo is public: photos, crops, embeddings, the watchlist and recordings never go into git.
+.venv/
+__pycache__/
+*.pyc
+.pytest_cache/
+models/
+data/*
+!data/videos.csv
+outputs/
+state/
+.env

@@ -1,0 +1,34 @@
+# Face watchlist demo defaults. Plan: docs/FACE_MODULE_PLAN.md (§5 default config).
+
+model:                        # detector.py: InsightFace model pack, only detection + recognition loaded
+  name: buffalo_l             # buffalo_s if the CPU is too slow (smaller, slightly less accurate)
+  det_size: 640
+  providers: [CPUExecutionProvider]
+  mem_arena: false            # ONNX Runtime memory arena: off keeps ~140 MB less after indexing (shared droplet)
+
+source: {max_height: 720}     # recordings are downloaded at <= 720p (faces need ~80 px)
+
+quality:                      # quality.py: faces failing any of these get no embedding (shown grey, never matched)
+  min_face_px: 80             # face box width in frame pixels; step 2 checks whether 60 still works at 720p
+  min_blur_var: 60            # Laplacian variance of the aligned 112x112 crop
+  max_yaw_deg: 35             # head turn, estimated from the 5 detector points
+  max_pitch_deg: 25           # head up / down, estimated from the 5 detector points
+  min_det_score: 0.6
+
+index: {checks_per_s: 4}      # index.py: frames per second of video that get faces detected and embedded
+
+search: {gap_s: 3, min_hits: 3, possible: 0.45, strong: 0.55}
+                              # search.py: hits less than gap_s apart in one recording = one appearance; fewer than
+                              # min_hits hits are not reported. Bands: best score >= strong -> Strong match,
+                              # >= possible -> Possible match. Start values, calibrated in step 2
+
+matching: {threshold: 0.45, vote_window: 5, vote_min: 3}   # replay: >= 3 of the last 5 checks
+
+enroll: {embeddings_per_person: 5, click_window_s: 2, click_min_sim: 0.6}
+                              # click a face: + faces within click_window_s that look like it (cosine >= click_min_sim)
+
+cooldown: {per_person_camera_s: 60}     # replay; demo value (600 for a real store)
+
+alerts: {language: hy, send_clip: true, not_found_silent: true}
+
+evidence: {clip_s: 8, retention_days: 14}
