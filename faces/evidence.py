@@ -188,12 +188,13 @@ def write_clip(frames: list[tuple[float, bytes | np.ndarray]], path: Path, fps: 
 
 
 def transcode(src: Path, dst: Path, max_h: int = 720) -> bool:
-    """Any video a phone or camera gives (mov / HEVC / 4K / rotated) -> H.264 mp4 at <= max_h, frame by frame:
-    memory stays flat whatever the length (decoding a whole clip into a list took 2 GB for 25 s)."""
+    """Any video a phone or camera gives (mov / HEVC / 4K / rotated) -> H.264 mp4 whose SHORT side is <= max_h
+    ("720p": a portrait phone video becomes 720x1280, not 405x720), frame by frame: memory stays flat whatever the
+    length (decoding a whole clip into a list took 2 GB for 25 s)."""
     dst.parent.mkdir(parents=True, exist_ok=True)
     ff = ffmpeg_exe()
     if ff:
-        r = subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(src), "-vf", f"scale=-2:'min({max_h},ih)'",
+        r = subprocess.run([ff, "-y", "-loglevel", "error", "-i", str(src), "-vf", f"scale='if(gt(ih,iw),min({max_h},iw),-2)':'if(gt(ih,iw),-2,min({max_h},ih))'",
                             *x264(23), str(dst)], capture_output=True, text=True)
         if r.returncode == 0 and dst.exists() and dst.stat().st_size > 0:
             return True
@@ -209,7 +210,7 @@ def transcode(src: Path, dst: Path, max_h: int = 720) -> bool:
             break
         if wr is None:
             h, w = img.shape[:2]
-            s = min(1.0, max_h / h)
+            s = min(1.0, max_h / min(h, w))
             size = (int(w * s) // 2 * 2, int(h * s) // 2 * 2)
             wr, _ = open_writer(dst, fps, size)
         wr.write(cv2.resize(img, size) if (img.shape[1], img.shape[0]) != size else img)
