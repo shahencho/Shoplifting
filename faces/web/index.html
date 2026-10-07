@@ -646,7 +646,11 @@ function drawLive(){
     $("#l-phsmall").textContent = pl.state === "ended" ? "Press Play to watch it again" : "";
   }
   $("#l-badge").className = "badge " + (pl.state === "playing" ? "live" : "");
-  $("#l-badge").innerHTML = pl.state === "playing" ? `<span class="dot pulse"></span>PLAYING` : pl.state === "paused" ? "PAUSED · click a face" : "";
+  // paused: say up front whether there is anything to click (grey faces only can't be added)
+  const fs = pl.faces || [], white = fs.filter(f => f.ok && !f.pid).length;
+  const pausedHint = !fs.length ? "no face here, play on" : white ? "click a white box"
+    : fs.some(f => f.pid) ? "red = already on the watchlist" : "faces too small or turned, play on";
+  $("#l-badge").innerHTML = pl.state === "playing" ? `<span class="dot pulse"></span>PLAYING` : pl.state === "paused" ? `PAUSED · ${pausedHint}` : "";
   $("#l-badge").hidden = !["playing", "paused"].includes(pl.state);
   $("#l-cam").textContent = pl.title || ""; $("#l-cam").hidden = !pl.title;
   $("#l-time").textContent = pl.recording ? `${mmss(pl.t)} / ${mmss(pl.duration)}` : "";

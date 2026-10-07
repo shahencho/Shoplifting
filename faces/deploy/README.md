@@ -34,15 +34,22 @@ droplet ──► Telegram (its own bot) · GitHub (face model, once) · YouTube
 3. Secrets: `~/Shoplifting-faces/faces/.env` (chmod 600): `TELEGRAM_BOT_TOKEN` (the faces bot; empty = alerts only
    logged), `DEMO_USER`, `DEMO_PASSWORD` (strong: it's on the internet). After changing it:
    `pm2 restart faces-demo --update-env`.
-4. Archive + index:
+4. The two demo samples (recordings + index + photo; the repo is public, so none of it is in git). Only recordings
+   where search works: the overhead CCTV ones (bar, retail) stay on the laptop, every face in them is too small.
    ```bash
-   ssh do-deploy "mkdir -p Shoplifting-faces/faces/data/archive Shoplifting-faces/faces/data/index"
-   scp faces/data/archive/*.mp4 faces/data/archive/*.json do-deploy:Shoplifting-faces/faces/data/archive/
-   scp faces/data/index/*.npz do-deploy:Shoplifting-faces/faces/data/index/
+   ssh do-deploy "mkdir -p Shoplifting-faces/faces/data/archive Shoplifting-faces/faces/data/index Shoplifting-faces/faces/data/originals"
+   scp faces/data/archive/Egy6I9XB5u8.mp4 faces/data/archive/up_1005_195521_link.* do-deploy:Shoplifting-faces/faces/data/archive/
+   scp faces/data/index/Egy6I9XB5u8.npz faces/data/index/up_1005_195521_link.npz do-deploy:Shoplifting-faces/faces/data/index/
+   scp faces/data/originals/shahen.jpg do-deploy:Shoplifting-faces/faces/data/originals/
    ```
-   (`*.json` = titles of recordings uploaded through the laptop dashboard, if any.)
+   (`up_1005_195521_link` = VIDEO0050; its `.json` holds the title.)
 5. First deploy: `ssh do-deploy "bash ~/Shoplifting-faces/faces/deploy/deploy_to_do.sh"`
-6. Open the dashboard → log in → Alerts (scan the QR, Start) → Watchlist → add a photo.
+6. Watchlist samples, once: "Woman at the till" (clicked in the grocery store at 0:06, found at 0:51, 1:09, 2:32,
+   2:43) and "Shahen" (the photo, found in VIDEO0050 at 0:02 and 0:14). Skips a sample already on the list.
+   ```bash
+   ssh do-deploy "cd ~/Shoplifting-faces && faces/.venv/bin/python -m faces.tools.seed_demo && pm2 restart faces-demo"
+   ```
+7. Open the dashboard → log in → Alerts (scan the QR, Start) → Watchlist: both samples with their matches.
 
 ## Every deploy after that
 
