@@ -12,17 +12,27 @@ detections:
   fire:  {enabled: true, conf: 0.35}
   smoke: {enabled: true, conf: 0.35}
 
-temporal: {window_s: 3, min_ratio: 0.8, iou: 0.3, checks_per_s: 5}   # frame skip derived from stream FPS
+# 60 % of the checks over 3 s on one spot: the note goes out and Qwen is asked at once (was 0.8, with a 60 % note
+# without Qwen before it). Frame skip derived from stream FPS; a slow CPU checks less often, the ratio still holds
+temporal: {window_s: 3, min_ratio: 0.6, iou: 0.3, checks_per_s: 5}
 
-cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15,
-           after_dismissed_s: 60, dismissed_scope: area}
+cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15}
 
-verify:   {model: qwen/qwen3.6-plus, frames: 5, timeout_s: 180, max_tokens: 8000, on_timeout: uncertain}   # current theft model; speed tuned later
+# After Qwen says NORMAL the spot is watched, never muted (docs/results_fire_real_test_2026-10-13.md): it comes back
+# after retrip_gap_s without passing -> possible-fire alert at once + Qwen again; it grows (area x grow_ratio) or gets
+# stronger (score + score_rise) -> Qwen again; no change -> no calls. Calls per incident <= max_calls, >= min_call_gap_s
+# apart. Quiet for close_after_s -> closed. "False alarm" from the customer: ignored until it changes, lookalike_h hours
+watch: {retrip_gap_s: 10, grow_ratio: 1.5, score_rise: 0.15, min_call_gap_s: 20, max_calls: 4, close_after_s: 120,
+        lookalike_h: 24}
+
+# reasoning: none = thinking off (decided 2026-10-13: thinking only if a test shows it is needed). Qwen-only test on
+# the real fire: same verdicts as thinking on, ~3 s instead of ~14 s, ~$0.0007 per call
+verify:   {model: qwen/qwen3.6-plus, reasoning: none, frames: 5, timeout_s: 180, max_tokens: 8000, on_timeout: uncertain}
 
 alerts:   {language: hy, send_dismissed: false, send_uncertain: true, offline_notice_after_s: 120,
-           # early note: Telegram "suspicious smoke/fire, checking..." once the filter is at min_ratio (before the
-           # 0.8 alert filter), closed by the alert or an all-clear after clear_after_s; silent = no phone sound
-           early_note: {enabled: true, min_ratio: 0.6, clear_after_s: 15, silent: true}}
+           # early note: Telegram "suspicious smoke/fire, checking with AI..." when Qwen is asked, then edited in
+           # place ("AI did not confirm, watching", "closed") or answered by the alert; silent = no phone sound
+           early_note: {enabled: true, silent: true}}
 
 evidence: {clip_before_s: 5, clip_after_s: 3, freeze_at: trigger, retention_days: 14}
 

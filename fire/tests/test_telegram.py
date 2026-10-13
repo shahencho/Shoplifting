@@ -110,3 +110,21 @@ def test_unlink_endpoint(tmp_path, monkeypatch):
     assert c.post("/api/telegram/unlink", json={"id": 1}).status_code == 404
     assert c.post("/api/telegram/unlink", json={"id": "x"}).status_code == 400
     assert [x["id"] for x in c.get("/api/state").json()["telegram"]["chats"]] == [2]
+
+
+def test_note_is_edited_in_place_not_sent_again(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", chats(1))
+    ev = event()
+    for kind in ("early", "dismissed", "closed"):     # checking -> AI did not confirm -> closed
+        tg.notify(kind, ev)
+    tg.flush()
+    assert tg.sent_to(1) == ["sendMessage", "editMessageText", "editMessageText"]
+
+
+def test_alert_buttons_store_the_feedback(tmp_path):
+    tg = FakeTelegram(tmp_path / "telegram.json", chats(1))
+    got = []
+    tg.on_feedback = lambda uid, value: got.append((uid, value)) or True
+    tg._on_button({"id": "q1", "data": "fb:1.1791919521:false", "message": {"chat": {"id": 1}, "message_id": 7}})
+    assert got == [("1.1791919521", "false")]
+    assert ("answerCallbackQuery", None) in tg.calls and ("editMessageReplyMarkup", 1) in tg.calls

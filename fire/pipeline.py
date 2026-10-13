@@ -7,7 +7,8 @@ Offline: Qwen blocks (SyncVerifier) and its measured latency is replayed in vide
 (simulate_latency=True), so cooldowns, upgrades and clips behave as they would live.
 
 Per event, in <out_dir>/events/E001/: snapshot.jpg (boxes drawn, trigger box highlighted), crop.jpg
-(what Qwen saw zoomed), clip.mp4 (clip_before_s before + clip_after_s after the trigger), event.json.
+(what Qwen saw zoomed), clip.mp4 (clip_before_s before + clip_after_s after the trigger), event.json. A re-trip or
+re-check of the same incident adds snapshot_2.jpg / crop_2.jpg / clip_2.mp4 ... (the alert shows the latest).
 <out_dir>/events.jsonl gets a line on every state change.
 """
 from __future__ import annotations
@@ -47,6 +48,7 @@ class Pipeline:
         self.checks_per_s = tc["checks_per_s"]
         self.window_s = tc["window_s"]
         self.n_frames = cfg["verify"].get("frames", 5)
+        self.note = (cfg["alerts"].get("early_note") or {}).get("enabled", True)   # 🟡 note when Qwen is asked
         self.clip_before_s = ev["clip_before_s"]
         self.clip_after_s = ev["clip_after_s"]
         self.conf = {c: d["conf"] for c, d in cfg["detections"].items()}
@@ -55,7 +57,8 @@ class Pipeline:
         self.filter = PersistenceFilter(tc["window_s"], tc["min_ratio"], tc["iou"])
         self.em = EventManager.from_config(cfg)
         self._verdicts: list[tuple[Action, object, float]] = []     # (action, future, t_asked)
-        self._clips: list[tuple[Event, list, float]] = []           # (event, frames before, t_end)
+        self._clips: list[tuple[Event, list, float, str]] = []      # (event, frames before, t_end, file name)
+        self._evidence_n: dict[int, int] = {}                       # event n -> evidence sets written
         self._waiting: list[Notice] = []                            # alerts waiting for their clip
         # start of the current detection streak (a gap longer than window_s ends it): "YOLO first saw it"
         self._seen_since: float | None = None
@@ -94,16 +97,12 @@ class Pipeline:
         with self.lock:
             self._collect_verdicts(t)
             self._finish_clips(t)
-            if notice := self.em.poll(t):
-                self.log(f"[E{notice.event.n}] t={t:.1f}s all clear: not confirmed within "
-                         f"{self.em.clear_after_s:.0f} s")
-                self.save_event(notice.event)
+            for notice in self.em.poll(t):
+                self.log(f"[E{notice.event.n}] t={t:.1f}s closed: nothing detected there for "
+                         f"{self.em.close_after_s:.0f} s")
                 self._send(notice)
-            act = self.em.on_check(t, idx, p, boxes)
-            if act and act.purpose == "early":
-                self._early_note(act.event, frame, t, boxes)
-            elif act:
-                self._ask(act, frame, t, boxes, p)
+            if act := self.em.on_check(t, idx, p, boxes):
+                self._act(act, frame, t, boxes, p)
         self.stats["checks"] += 1
         self.stats["t"] = round(t, 2)
         if self.on_frame:
@@ -122,45 +121,57 @@ class Pipeline:
             self._collect_verdicts(t, final=True)
             self._finish_clips(t, final=True)
 
-    # --- early note, evidence + Qwen ---
+    # --- note, evidence + Qwen ---
 
-    def _early_note(self, ev: Event, frame: np.ndarray, t: float, boxes: list[Box]) -> None:
-        """Filter at the early ratio: photo now, no Qwen, no clip. The alert or the all-clear follows."""
-        ev.wall_time = self.clock() if self.clock else ""
-        ev.trigger_time = time.time()
-        ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
-        d = self.out_dir / "events" / f"E{ev.n:03d}"
-        d.mkdir(parents=True, exist_ok=True)
-        (d / "early.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))
-        ev.files.update({"snapshot": f"events/E{ev.n:03d}/early.jpg", "snapshot_path": str(d / "early.jpg")})
-        self.log(f"[E{ev.n}] t={t:.1f}s early note: {ev.box.cls} {ev.box.conf:.2f}, ratio {ev.ratio:.2f} -> Watching")
-        self._send(Notice("early", ev))
-
-    def _ask(self, act: Action, frame: np.ndarray, t: float, boxes: list[Box], p: Persist) -> None:
+    def _act(self, act: Action, frame: np.ndarray, t: float, boxes: list[Box], p: Persist) -> None:
         ev = act.event
-        box = ev.box if act.purpose == "initial" else (p.box or ev.box)
-        frames = qwen_frames(self.stream.clip(t - self.window_s, t - 1e-6), frame, self.n_frames)
-        crop_jpg = crop(frame, box)
+        if act.purpose == "upgrade":            # a possible fire during its cooldown: Qwen again, no new evidence
+            box = p.box or ev.box
+            self.log(f"[E{ev.n}] t={t:.1f}s re-asking Qwen (possible fire, upgrade check)")
+            self._submit(act, frame, crop(frame, box), box, t)
+            return
+        crop_jpg = self._evidence(ev, frame, t, boxes)
+        ev.trigger_time = time.time()
         if act.purpose == "initial":
             ev.wall_time = self.clock() if self.clock else ""
-            ev.trigger_time = time.time()
-            if ev.first_seen_t is None:         # kept from the early note, if there was one
-                ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
-            d = self.out_dir / "events" / f"E{ev.n:03d}"
-            d.mkdir(parents=True, exist_ok=True)
-            (d / "snapshot.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))
-            (d / "crop.jpg").write_bytes(crop_jpg)
-            rel = f"events/E{ev.n:03d}"
-            ev.files.update({"snapshot": f"{rel}/snapshot.jpg", "crop": f"{rel}/crop.jpg",
-                             "snapshot_path": str(d / "snapshot.jpg")})
-            # frames before the trigger are copied out now, before the ring buffer moves on
-            self._clips.append((ev, self.stream.clip(t - self.clip_before_s, t), t + self.clip_after_s))
-            self.log(f"[E{ev.n}] t={t:.1f}s {ev.kind}: {ev.box.cls} {ev.box.conf:.2f}, ratio {ev.ratio:.2f} -> Checking (Qwen)")
+            ev.uid = f"{ev.n}.{int(ev.trigger_time)}"
+            ev.first_seen_t = round(self._seen_since if self._seen_since is not None else t, 2)
+            self.log(f"[E{ev.n}] t={t:.1f}s {ev.kind}: {ev.box.cls} {ev.box.conf:.2f}, ratio {ev.ratio:.2f} "
+                     f"-> Checking (Qwen{', note sent' if self.note else ''})")
+            if self.note:
+                ev.early_t = t
+                self._send(Notice("early", ev))
+        elif act.purpose == "retrip":
+            self.log(f"[E{ev.n}] t={t:.1f}s came back after the AI said no: {ev.box.cls} {ev.box.conf:.2f} "
+                     f"-> possible fire alert{', Qwen again' if act.ask else ' (no Qwen: call budget used)'}")
+            self._waiting.append(Notice("alert", ev))  # ⚠️ as soon as its clip is written
         else:
-            self.log(f"[E{ev.n}] t={t:.1f}s re-asking Qwen (possible fire, upgrade check)")
+            self.log(f"[E{ev.n}] t={t:.1f}s watched spot changed: {ev.box.cls} {ev.box.conf:.2f} -> Qwen again")
+        if act.ask:
+            self._submit(act, frame, crop_jpg, ev.box, t)
+        self.save_event(ev)
+
+    def _evidence(self, ev: Event, frame: np.ndarray, t: float, boxes: list[Box]) -> bytes:
+        """Snapshot + crop now, clip after clip_after_s. The first set is snapshot.jpg, later ones snapshot_2.jpg..."""
+        k = self._evidence_n[ev.n] = self._evidence_n.get(ev.n, 0) + 1
+        sfx = "" if k == 1 else f"_{k}"
+        rel = f"events/E{ev.n:03d}"
+        d = self.out_dir / rel
+        d.mkdir(parents=True, exist_ok=True)
+        crop_jpg = crop(frame, ev.box)
+        (d / f"snapshot{sfx}.jpg").write_bytes(jpeg(draw_boxes(frame, boxes, highlight=ev.box), max_w=1280))
+        (d / f"crop{sfx}.jpg").write_bytes(crop_jpg)
+        ev.files.update({"snapshot": f"{rel}/snapshot{sfx}.jpg", "crop": f"{rel}/crop{sfx}.jpg",
+                         "snapshot_path": str(d / f"snapshot{sfx}.jpg")})
+        # frames before the trigger are copied out now, before the ring buffer moves on
+        self._clips.append((ev, self.stream.clip(t - self.clip_before_s, t), t + self.clip_after_s, f"clip{sfx}.mp4"))
+        return crop_jpg
+
+    def _submit(self, act: Action, frame: np.ndarray, crop_jpg: bytes, box: Box, t: float) -> None:
+        frames = qwen_frames(self.stream.clip(t - self.window_s, t - 1e-6), frame, self.n_frames)
         self._verdicts.append((act, self.verifier.submit(frames, crop_jpg, box.cls), t))
         self.stats["qwen_calls"] += 1
-        self.save_event(ev)
+        self.save_event(act.event)
 
     def _collect_verdicts(self, t: float, final: bool = False) -> None:
         for item in list(self._verdicts):
@@ -179,27 +190,33 @@ class Pipeline:
             self.log(f"[E{ev.n}] {act.purpose} verdict {v.verdict} ({v.latency_s:.1f} s, ${v.cost_usd:.4f}) "
                      f"-> {ev.state}: {v.reason}")
             self.save_event(ev)
-            if notice:
-                if notice.kind == "alert" and "clip" not in ev.files and any(e is ev for e, _, _ in self._clips):
-                    self._waiting.append(notice)       # sent as soon as the clip is written
-                else:
-                    self._send(notice)
+            if not notice:
+                continue
+            if notice.kind == "upgrade" and any(n.event is ev and n.kind == "alert" for n in self._waiting):
+                continue                            # the ⚠️ hasn't gone out yet: it goes out as 🔥 instead
+            if notice.kind == "alert" and any(e is ev for e, *_ in self._clips):
+                self._waiting.append(notice)        # sent as soon as the clip is written
+            else:
+                self._send(notice)
 
     def _finish_clips(self, t: float, final: bool = False) -> None:
         for item in list(self._clips):
-            ev, before, t_end = item
+            ev, before, t_end, name = item
             if t < t_end and not final:
                 continue
             self._clips.remove(item)
-            last = before[-1][0] if before else ev.t - 1
-            frames = before + [f for f in self.stream.clip(ev.t, t_end) if f[0] > last]
-            path = self.out_dir / "events" / f"E{ev.n:03d}" / "clip.mp4"
+            t_trig = t_end - self.clip_after_s
+            last = before[-1][0] if before else t_trig - 1
+            frames = before + [f for f in self.stream.clip(t_trig, t_end) if f[0] > last]
+            path = self.out_dir / "events" / f"E{ev.n:03d}" / name
             span = frames[-1][0] - frames[0][0] if len(frames) > 1 else 0
             fps = (len(frames) - 1) / span if span > 0 else self.stream.buffer_fps   # real rate -> real-time playback
             if write_clip(frames, path, fps):
-                ev.files.update({"clip": f"events/E{ev.n:03d}/clip.mp4", "clip_path": str(path),
+                ev.files.update({"clip": f"events/E{ev.n:03d}/{name}", "clip_path": str(path),
                                  "clip_s": round(frames[-1][0] - frames[0][0], 1)})
             self.save_event(ev)
+            if any(e is ev for e, *_ in self._clips):
+                continue                            # a newer clip of this incident is still being recorded
             for n in [n for n in self._waiting if n.event is ev]:
                 self._waiting.remove(n)
                 self._send(n)

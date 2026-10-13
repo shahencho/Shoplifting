@@ -69,8 +69,11 @@ Event folders older than 14 days are deleted daily (`/etc/cron.daily/fire-demo-c
   (`⏱ YOLO <first seen> → alert <trigger> (+s) · sent +s`). Switch it with
   `ssh do-deploy "bash ~/Shoplifting/fire/deploy/qwen.sh on"` (or `off` / `status`). It restarts the app and stays
   set across deploys (`fire/.env` is never touched by them; the deploy only adds `FIRE_QWEN=off` if the line is missing).
-- **Early note** (`alerts.early_note` in `config.yaml`): at 60% of checks over 3 s a silent
-  "🟡 Suspicious smoke/fire, checking…" with photo; the alert or "✅ all clear" (after 15 s) follows as a reply.
+- **Note** (`alerts.early_note` in `config.yaml`): at 60% of checks over 3 s a silent "🟡 Suspicious smoke/fire,
+  checking with AI…" with photo, and Qwen is asked at once. The alert follows as a reply; a NORMAL edits the note
+  ("⚪ AI did not confirm, still watching"), and 2 min without detection there edits it to "✅ closed". If the spot
+  comes back after the NORMAL, "⚠️ possible fire" goes out at once (`watch` in `config.yaml`). Alerts carry
+  [Real fire] [False alarm] buttons; "False alarm" silences that spot until it grows or gets stronger.
 - **Video files never play by themselves.** After a start, deploy or camera save the dashboard shows "Video ready";
   it plays only on **Play / Replay from the start**. Live cameras start at once.
 - **AV1 videos** (most YouTube downloads) don't decode here: convert them first:

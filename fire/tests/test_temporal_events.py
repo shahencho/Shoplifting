@@ -13,8 +13,9 @@ def run(filter_, seq):
     return [filter_.update(i / CPS, boxes) for i, boxes in enumerate(seq)]
 
 
-def drive(seq, answer, latency=2.0, **em_kw):
-    """Feed boxes per check; answer(action) -> verdict string, delivered `latency` seconds later."""
+def drive(seq, answer, latency=2.0, note=False, **em_kw):
+    """Feed boxes per check; answer(action) -> verdict string, delivered `latency` seconds later.
+    note: the initial check sends the note (as the pipeline does), so NORMAL and "closed" edit it."""
     f, em = PersistenceFilter(3, 0.8), EventManager(**em_kw)
     pending, notices = [], []
     for i, boxes in enumerate(seq):
@@ -23,8 +24,15 @@ def drive(seq, answer, latency=2.0, **em_kw):
             pending.remove((due, act, v))
             if n := em.on_verdict(act, Verdict(v, 80, v.lower(), "", latency), t):
                 notices.append((round(t, 1), n.kind, n.event.n))
+        for n in em.poll(t):
+            notices.append((round(t, 1), n.kind, n.event.n))
         if act := em.on_check(t, i, f.update(t, boxes), boxes):
-            pending.append((t + latency, act, answer(act)))
+            if act.purpose == "initial" and note:
+                act.event.early_t = t
+            if act.purpose == "retrip":
+                notices.append((round(t, 1), "alert", act.event.n))     # the pipeline sends the possible fire
+            if act.ask:
+                pending.append((t + latency, act, answer(act)))
     return em, notices
 
 
@@ -66,12 +74,68 @@ def test_new_after_fire_goes_away():
     assert [e.kind for e in em.events] == ["new", "new"]
 
 
-def test_dismissed_blocks_that_area_only_for_60s():
+def test_normal_watches_the_spot_without_new_calls_while_it_stays_the_same():
     seq = [[A]] * (5 * 100)                            # red jacket standing still for 100 s
     em, notices = drive(seq, lambda a: "NORMAL")
     assert notices == []                               # phone stays silent
-    assert [e.state for e in em.events] == ["dismissed", "dismissed"]
-    assert 61 < em.events[1].t - em.events[0].t < 64    # re-checked only after the 60 s area cooldown
+    assert [e.state for e in em.events] == ["dismissed"] and len(em.events[0].calls) == 1   # no call a minute
+    assert len(em.spots) == 1                          # watched, not muted
+
+
+def test_comes_back_after_normal_alerts_at_once_and_qwen_can_confirm():
+    # the real test of 2026-10-13: small flame, out, lit again bigger (the bag fire at 39 s and 73 s)
+    seq = [[A]] * 25 + [[]] * 75 + [[A]] * 25          # 5 s fire, 15 s nothing, fire again
+    answers = iter(["NORMAL", "CONFIRMED"])
+    em, notices = drive(seq, lambda a: next(answers), note=True)
+    ev = em.events[0]
+    assert [k for _, k, _ in notices] == ["dismissed", "alert", "upgrade"]   # note edited, possible at once, fire
+    assert [c["purpose"] for c in ev.calls] == ["initial", "retrip"] and len(em.events) == 1
+    assert ev.state == "confirmed" and 20 <= ev.retrip_t <= 23
+
+
+def test_grows_after_normal_asks_again():
+    big = Box("fire", 0.5, (90, 90, 230, 230))         # contains A, area ~2x
+    seq = [[A]] * 50 + [[big]] * 150                   # same spot, twice as big from 10 s
+    answers = iter(["NORMAL", "CONFIRMED"])
+    em, notices = drive(seq, lambda a: next(answers))
+    ev = em.events[0]
+    assert [c["purpose"] for c in ev.calls] == ["initial", "recheck"]
+    assert ev.calls[1]["t_answer"] - ev.calls[0]["t_answer"] >= 20          # min_call_gap_s
+    assert ev.state == "confirmed" and [k for _, k, _ in notices] == ["alert"]
+
+
+def test_stronger_after_normal_asks_again_once():
+    strong = Box("fire", 0.8, A.xyxy)
+    seq = [[A]] * 50 + [[strong]] * 150
+    em, _ = drive(seq, lambda a: "NORMAL")
+    assert [c["purpose"] for c in em.events[0].calls] == ["initial", "recheck"]   # then 0.8 is the new level
+
+
+def test_calls_per_incident_are_capped():
+    seq = ([[A]] * 20 + [[]] * 60) * 25                # flickers on the same spot for ~400 s
+    em, _ = drive(seq, lambda a: "NORMAL")
+    assert all(len(e.calls) <= 4 for e in em.events)
+
+
+def test_quiet_watched_spot_is_closed():
+    seq = [[A]] * 25 + [[]] * (5 * 130)
+    em, notices = drive(seq, lambda a: "NORMAL", note=True)
+    assert [k for _, k, _ in notices] == ["dismissed", "closed"] and em.events[0].state == "cleared"
+    assert em.spots == []
+
+
+def test_false_alarm_silences_the_spot_until_it_grows():
+    big = Box("fire", 0.5, (90, 90, 230, 230))
+    f, em = PersistenceFilter(3, 0.8), EventManager()
+    actions = []
+    for i, boxes in enumerate([[A]] * (5 * 120) + [[big]] * 50):
+        t = i / CPS
+        if act := em.on_check(t, i, f.update(t, boxes), boxes):
+            actions.append((round(t), act.purpose, act.event.n))
+            em.on_verdict(act, Verdict("UNCERTAIN", 60, "", "", 1.0), t)
+            em.mark_false(act.event)                    # the customer presses "False alarm"
+    assert [a[1:] for a in actions] == [("initial", 1), ("initial", 2)]   # unchanged: nothing more for 2 min
+    assert actions[1][0] >= 120                         # it grew: checked again
 
 
 def test_fire_elsewhere_caught_while_area_dismissed():

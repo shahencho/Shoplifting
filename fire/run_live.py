@@ -80,6 +80,7 @@ def main() -> None:
     rt.telegram = from_env(cfg, camera=lambda: rt.camera_name)
     if rt.telegram:
         rt.notifier = rt.telegram
+        rt.telegram.on_feedback = rt.feedback_uid       # [Real fire] / [False alarm] under an alert
         rt.telegram.start_linking()
         print(f"[telegram] bot {rt.telegram.link}  linked: {[c['name'] for c in rt.telegram.chats] or 'nobody yet'}")
     print(f"Qwen: {cfg['verify']['model'] if use_qwen else 'off'} (timeout {cfg['verify']['timeout_s']} s)  "

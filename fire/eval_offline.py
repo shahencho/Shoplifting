@@ -141,7 +141,7 @@ def run_pipeline(video: Path, checks: list[dict], cfg: dict, out: Path, notifier
     rows = []
     sc, vc = cfg["stream"], cfg["verify"]
     verifier = SyncVerifier(Verifier(vc["model"], timeout_s=vc["timeout_s"], max_tokens=vc.get("max_tokens", 8000),
-                                     window_s=cfg["temporal"]["window_s"]))
+                                     window_s=cfg["temporal"]["window_s"], reasoning=vc.get("reasoning")))
     stream = Stream(str(video), buffer_s=sc["buffer_s"], buffer_fps=sc["buffer_fps"])
     pipe = Pipeline(cfg, stream, verifier=verifier, notifier=notifier, out_dir=out, simulate_latency=True,
                     on_frame=lambda fr, bx, t, p: rows.append({"t": t, "ratio": round(p.ratio, 3), "passed": p.passed}),
@@ -155,7 +155,9 @@ def video_metrics(label: dict, checks: list[dict], conf: dict, events: list) -> 
     first_det = next((c["t"] for c in checks if boxes_at(c, conf)), None)
     flame, smoke = _num(label.get("flame_visible_s")), _num(label.get("smoke_visible_s"))
     alerts = [e for e in events if e.state in ALERT_STATES]
-    first_alert = round(alerts[0].verdict_t, 2) if alerts else None
+    # an incident alerted by a re-trip (it came back after a NORMAL) alerts at the re-trip, not at the NORMAL
+    first_alert = round(alerts[0].retrip_t if alerts[0].retrip_t is not None else alerts[0].verdict_t, 2) \
+        if alerts else None
     first_trigger = events[0].t if events else None
     delay = lambda ref: round(first_alert - ref, 1) if first_alert is not None and ref is not None else None
     calls = [c for e in events for c in e.calls if c["verdict"] != "UNVERIFIED"]
@@ -284,7 +286,7 @@ def main() -> None:
     settings = {"window_s": window, "min_ratio": ratio, "iou": iou, "conf": conf, "after_alert_s": after_alert_s,
                 "checks_per_s": tc["checks_per_s"], "weights": cfg["model"]["weights"], "imgsz": cfg["model"]["imgsz"],
                 "qwen": cfg["verify"]["model"] if args.qwen else None,
-                "after_dismissed_s": cfg["cooldown"]["after_dismissed_s"]}
+                "reasoning": cfg["verify"].get("reasoning"), "watch": cfg.get("watch") or {}}
     summary = {"settings": settings, "videos": {v["path"].name: v["metrics"] for v in videos}, "sweep": sw}
     (run_dir / "summary.json").write_text(json.dumps(summary, indent=1), encoding="utf-8")
     write_report(run_dir / "report.html", settings, videos, sw, labels_path=DATA / "labels.csv")

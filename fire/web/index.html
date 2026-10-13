@@ -348,10 +348,10 @@ function toast(text){
 // acknowledge is stored on the server (stops reminders for the ongoing fire); isAcked reads it from the event
 const isAcked = e => !!(e && e.acked);
 
-const STATE = {checking:["Checking…","AI is looking at it"], confirmed:["Fire confirmed",""], possible:["Possible fire",""],
-               dismissed:["Dismissed","false alarm, no alert sent"], unverified:["Alert (not verified)",""],
-               watching:["Suspicious, checking…","early note sent, waiting for confirmation"],
-               cleared:["All clear","not confirmed, all-clear sent"]};
+const STATE = {checking:["Checking…","note sent, AI is looking at it"], confirmed:["Fire confirmed",""],
+               possible:["Possible fire",""], unverified:["Alert (not verified)",""],
+               dismissed:["AI did not confirm","still watching this spot"],
+               cleared:["Closed","no fire signal there for 2 min"]};
 const CAMSTATE = {ok:["ok","Monitoring"], connecting:["wait","Connecting…"], offline:["bad","Camera offline"],
                   not_configured:["", "No camera"], ended:["", "Video ended"], stopped:["", "Stopped"],
                   ready:["", "Video ready"]};
@@ -576,7 +576,8 @@ function drawLive(){
     let [title, note] = STATE[e.state] || [e.state, ""];
     if (e.state === "confirmed" && e.kind === "still") title = "Fire still detected";
     if (e.upgraded_t !== null && e.state === "confirmed") note = "upgraded from possible fire";
-    if (e.state === "possible") note = e.verdict === "UNCERTAIN" ? "AI not sure, alert sent" : "not verified, alert sent";
+    if (e.state === "possible") note = e.retrip_t !== null ? "came back after the AI said no, alert sent"
+                                      : e.verdict === "UNCERTAIN" ? "AI not sure, alert sent" : "not verified, alert sent";
     const f = e.files || {};
     return `<article class="ev ${e.state}"><span class=rd></span>
       <div class=top>

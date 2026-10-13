@@ -17,8 +17,8 @@ def _fmt(v, unit=" s", signed=False):
     return f"{v:+.1f}{unit}" if signed else f"{v:.1f}{unit}"
 
 
-STATE_TITLE = {"confirmed": "Fire confirmed", "possible": "Possible fire", "dismissed": "Dismissed",
-               "unverified": "Unverified alert", "checking": "Checking…"}
+STATE_TITLE = {"confirmed": "Fire confirmed", "possible": "Possible fire", "dismissed": "AI did not confirm (watched)",
+               "unverified": "Unverified alert", "checking": "Checking…", "cleared": "Closed (quiet)"}
 
 
 def _card(e) -> str:
@@ -80,7 +80,8 @@ def write_report(out: Path, settings: dict, videos: list[dict], sweep: list[dict
     settings_line = (f"window {s['window_s']} s · ratio ≥ {s['min_ratio']} · IoU > {s['iou']} · conf {conf_txt} · "
                      f"cooldown {s['after_alert_s']} s · {s['checks_per_s']} checks/s · "
                      f"{Path(s['weights']).name} @ {s['imgsz']} · "
-                     + (f"Qwen {s['qwen']} (dismissed-area cooldown {s['after_dismissed_s']} s)" if s.get("qwen")
+                     + (f"Qwen {s['qwen']}, thinking {s.get('reasoning') or 'default'} (after NORMAL: re-trip "
+                        f"{s['watch'].get('retrip_gap_s')} s, ≤ {s['watch'].get('max_calls')} calls)" if s.get("qwen")
                         else "no Qwen: every event counts as an alert (unverified)"))
 
     rows = []

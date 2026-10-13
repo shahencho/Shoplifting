@@ -3,8 +3,12 @@
 Separate from the theft pipeline: own venv, config, data and outputs. Plan: [docs/FIRE_MODULE_PLAN_3.md](../docs/FIRE_MODULE_PLAN_3.md).
 
 ```
-camera -> YOLO fire/smoke (5 checks/s) -> persistence filter (3 s) -> Qwen verdict -> Telegram + dashboard
+camera -> YOLO fire/smoke (5 checks/s) -> persistence filter (60 % of 3 s) -> 🟡 note + Qwen -> Telegram + dashboard
 ```
+
+After a NORMAL the spot is watched, never muted: if it comes back, grows or gets stronger, Qwen is asked again
+(coming back also sends "⚠️ possible fire" at once). Only the customer's "False alarm" silences a spot. Why and how
+it was tested: [docs/results_fire_real_test_2026-10-13.md](../docs/results_fire_real_test_2026-10-13.md).
 
 All commands run from the **repo root**.
 
@@ -40,7 +44,7 @@ Dashboard: `http://localhost:8000` (phone on the same network: `http://<this-com
 Setup once: **1 Camera** (Hikvision/Dahua fields or any stream URL, Test connection) → **2 Detections**
 (fire / smoke on-off, the rest "Coming soon") → **3 Alerts** (QR code → Telegram bot → Start, test alert).
 Then **Live**: live view with boxes, camera status, counters, events (Checking… / Fire confirmed / Possible fire /
-Dismissed) with snapshot, Qwen's reason, clip, and Real / False alarm buttons.
+AI did not confirm / Closed) with snapshot, Qwen's reason, clip, and Real / False alarm buttons.
 
 Output per run: `fire/outputs/live/<camera>_<time>/events/E001/` (snapshot.jpg, crop.jpg sent to Qwen, clip.mp4,
 event.json) and `events.jsonl` (one line per state change). Settings and linked Telegram chats: `fire/state/`.

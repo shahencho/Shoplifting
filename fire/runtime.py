@@ -148,7 +148,8 @@ class Runtime:
                              reconnect_backoff_s=sc["reconnect_backoff_s"], max_lag_s=sc["max_lag_s"],
                              realtime=self.realtime_files)
         verifier = AsyncVerifier(Verifier(vc["model"], timeout_s=vc["timeout_s"], max_tokens=vc.get("max_tokens", 8000),
-                                          window_s=self.cfg["temporal"]["window_s"])) if self.use_qwen else NoVerifier()
+                                          window_s=self.cfg["temporal"]["window_s"], reasoning=vc.get("reasoning"))
+                                 ) if self.use_qwen else NoVerifier()
         name = "".join(ch if ch.isalnum() else "_" for ch in self.camera_name)[:40]
         self.out_dir = FIRE / "outputs" / "live" / f"{name}_{datetime.now():%Y%m%d_%H%M%S}"
         self.pipeline = Pipeline(self.cfg, self.stream, verifier=verifier, notifier=self.notifier, out_dir=self.out_dir,
@@ -248,11 +249,22 @@ class Runtime:
         return False
 
     def feedback(self, n: int, value: str) -> bool:
+        """Real / False alarm (dashboard or Telegram). False alarm silences that spot until it grows or gets stronger:
+        the only way a spot is silenced (an AI "no" never mutes it)."""
         if not self.pipeline or value not in ("real", "false", ""):
             return False
-        for e in self.pipeline.events:
-            if e.n == n:
-                e.feedback = value or None
-                self.pipeline.save_event(e)
-                return True
+        with self.pipeline.lock:
+            for e in self.pipeline.events:
+                if e.n == n:
+                    e.feedback = value or None
+                    if value == "false":
+                        self.pipeline.em.mark_false(e)
+                        self.log(f"[E{n}] false alarm: that spot is ignored until it grows or gets stronger")
+                    self.pipeline.save_event(e)
+                    return True
         return False
+
+    def feedback_uid(self, uid: str, value: str) -> bool:
+        """Telegram buttons carry the event's uid, so a button from an earlier run never hits a different event."""
+        e = next((e for e in self.pipeline.events if e.uid == uid), None) if self.pipeline else None
+        return self.feedback(e.n, value) if e else False
