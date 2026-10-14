@@ -6,7 +6,7 @@ Separate from the theft pipeline: own venv, config, data and outputs. Plan: [doc
 camera -> YOLO fire/smoke (5 checks/s) -> persistence filter (60 % of 3 s) -> 🟡 note + Qwen -> Telegram + dashboard
 ```
 
-After a NORMAL the spot is watched, never muted: if it comes back, grows or gets stronger, Qwen is asked again
+A positive fast answer (thinking off) is asked once more with thinking before a loud alert. After a NORMAL the spot is watched, never muted: if it comes back, grows or gets stronger, Qwen is asked again
 (coming back also sends "⚠️ possible fire" at once). Only the customer's "False alarm" silences a spot. Why and how
 it was tested: [docs/results_fire_real_test_2026-10-13.md](../docs/results_fire_real_test_2026-10-13.md).
 

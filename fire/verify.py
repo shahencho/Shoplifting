@@ -69,7 +69,9 @@ class Verifier:
         # OpenRouter reasoning effort: none (thinking off) / minimal / low / medium / high; None = the model's default
         self.reasoning = reasoning
 
-    def classify(self, frames: list[bytes], crop: bytes | None, cls: str) -> Verdict:
+    def classify(self, frames: list[bytes], crop: bytes | None, cls: str, thinking: bool = False) -> Verdict:
+        """thinking=True: this call uses the model's default thinking (the second, slow check of a positive answer)."""
+        reasoning = None if thinking else self.reasoning
         k = len(frames)
         content: list[dict] = [{"type": "text", "text": self.prompt.format(k=k, window=self.window_s, cls=cls)}]
         for i, jpg in enumerate(frames, 1):
@@ -89,7 +91,7 @@ class Verifier:
                 resp = self.client.with_options(timeout=left).chat.completions.create(
                     model=self.model, messages=messages, temperature=self.temperature, max_tokens=self.max_tokens,
                     extra_body={"usage": {"include": True},    # OpenRouter: return cost
-                                **({"reasoning": {"effort": self.reasoning}} if self.reasoning else {})},
+                                **({"reasoning": {"effort": reasoning}} if reasoning else {})},
                 )
             except APITimeoutError:
                 continue                                        # loop ends as TIMEOUT
@@ -119,12 +121,12 @@ class AsyncVerifier:
     def __init__(self, verifier: Verifier):
         self.verifier = verifier
 
-    def submit(self, frames, crop, cls) -> Future:
+    def submit(self, frames, crop, cls, thinking: bool = False) -> Future:
         f: Future = Future()
 
         def work():
             try:
-                f.set_result(self.verifier.classify(frames, crop, cls))
+                f.set_result(self.verifier.classify(frames, crop, cls, thinking))
             except BaseException as e:           # classify never raises; belt and braces
                 f.set_exception(e)
         threading.Thread(target=work, daemon=True, name="qwen").start()
@@ -140,9 +142,9 @@ class SyncVerifier:
     def __init__(self, verifier: Verifier):
         self.verifier = verifier
 
-    def submit(self, frames, crop, cls) -> Future:
+    def submit(self, frames, crop, cls, thinking: bool = False) -> Future:
         f: Future = Future()
-        f.set_result(self.verifier.classify(frames, crop, cls))
+        f.set_result(self.verifier.classify(frames, crop, cls, thinking))
         return f
 
     def close(self) -> None:
@@ -152,7 +154,7 @@ class SyncVerifier:
 class NoVerifier:
     """No Qwen: every event is UNVERIFIED and treated as an alert (step 2 behaviour)."""
 
-    def submit(self, frames, crop, cls) -> Future:
+    def submit(self, frames, crop, cls, thinking: bool = False) -> Future:
         f: Future = Future()
         f.set_result(Verdict("UNVERIFIED", 0, "Qwen not used", "", 0.0))
         return f

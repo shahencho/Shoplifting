@@ -81,6 +81,8 @@ class Action:
     event: Event
     purpose: str                    # "initial" / "retrip" / "recheck" / "upgrade"
     ask: bool = True                # False: a re-trip over the call budget (⚠️ still goes out, no Qwen)
+    second: bool = False            # pipeline: this is the thinking check of a positive fast answer
+    first: object = None            # pipeline: the fast answer it follows
 
 
 @dataclass
@@ -145,6 +147,12 @@ class EventManager:
                    close_after_s=w.get("close_after_s", 120), lookalike_s=w.get("lookalike_h", 24) * 3600,
                    lookalike_after=w.get("lookalike_after", 2))
 
+    @staticmethod
+    def _n_calls(ev: Event) -> int:
+        """Qwen questions asked about the incident. The fast first answer of a two-step check is recorded as
+        "<purpose>_fast" and counts with the second (thinking) one as a single question."""
+        return sum(not c["purpose"].endswith("_fast") for c in ev.calls)
+
     # --- customer ---
 
     def acknowledge(self, ev: Event) -> None:
@@ -194,7 +202,7 @@ class EventManager:
         if t < self.cooldown_until:
             ev = self.last_alert
             if (self.allow_upgrade and ev and ev.state == "possible" and ev.feedback != "false"
-                    and len(ev.calls) < self.max_calls and t - self._last_upgrade_try >= self.recheck_every_s):
+                    and self._n_calls(ev) < self.max_calls and t - self._last_upgrade_try >= self.recheck_every_s):
                 self._last_upgrade_try = t
                 self.in_flight = Action(ev, "upgrade")
                 return self.in_flight
@@ -225,7 +233,7 @@ class EventManager:
         ev = s.event
         normals = sum(c["verdict"] == "NORMAL" for c in ev.calls)
         if gap >= self.retrip_gap_s and normals < self.lookalike_after:
-            can_ask = len(ev.calls) < self.max_calls      # the gap itself rate-limits re-trips: only the budget applies
+            can_ask = self._n_calls(ev) < self.max_calls      # the gap itself rate-limits re-trips: only the budget applies
             self.spots.remove(s)
             ev.t, ev.idx, ev.ratio, ev.box, ev.boxes = t, idx, ratio, box, boxes
             ev.state, ev.retrip_t, ev.reason = "possible", t, ""
@@ -241,7 +249,7 @@ class EventManager:
         # a spot the AI called NORMAL lookalike_after times keeps flickering back (morning fog on a patch of
         # ground, 2026-10-14): a re-trip no longer alerts at once, it only asks Qwen again (within the budget)
         comes_back = gap >= self.retrip_gap_s
-        can_ask = len(ev.calls) < self.max_calls and t - s.last_call >= self.min_call_gap_s
+        can_ask = self._n_calls(ev) < self.max_calls and t - s.last_call >= self.min_call_gap_s
         if not ((grows or stronger or comes_back) and can_ask):
             return None
         s.box, s.n_boxes, s.last_call = box, here, t

@@ -20,8 +20,8 @@ class FakeVerifier:
     def __init__(self, verdicts, latency=2.0):
         self.verdicts, self.latency, self.calls = list(verdicts), latency, []
 
-    def submit(self, frames, crop, cls):
-        self.calls.append((len(frames), len(crop) > 0, cls))
+    def submit(self, frames, crop, cls, thinking=False):
+        self.calls.append((len(frames), len(crop) > 0, cls, thinking))
         f = Future()
         f.set_result(Verdict(self.verdicts.pop(0) if self.verdicts else "CONFIRMED", 90, "flames on the left", "",
                              self.latency, cost_usd=0.001))
@@ -43,16 +43,18 @@ def _video(path, seconds=20, fps=30):
     w.release()
 
 
-def _cfg():
-    return copy.deepcopy(yaml.safe_load((FIRE / "config.yaml").read_text(encoding="utf-8")))
+def _cfg(confirm=False):
+    cfg = copy.deepcopy(yaml.safe_load((FIRE / "config.yaml").read_text(encoding="utf-8")))
+    cfg["verify"]["confirm_with_thinking"] = confirm     # most tests: one fast answer; the two-step ones switch it on
+    return cfg
 
 
-def _run(tmp_path, verdicts, fire_from_s=2.0, early=False, fire_until_s=99.0, on=None, latency=2.0):
+def _run(tmp_path, verdicts, fire_from_s=2.0, early=False, fire_until_s=99.0, on=None, latency=2.0, confirm=False):
     """on(seconds) -> fire visible; default: from fire_from_s to fire_until_s."""
     on = on or (lambda s: fire_from_s <= s < fire_until_s)
     _video(tmp_path / "v.mp4", seconds=25)
     rec, ver = Recorder(), FakeVerifier(verdicts, latency)
-    cfg = _cfg()
+    cfg = _cfg(confirm)
     cfg["alerts"]["early_note"]["enabled"] = early
     stream = Stream(str(tmp_path / "v.mp4"), buffer_s=10, buffer_fps=10)
     pipe = Pipeline(cfg, stream, verifier=ver, notifier=rec, out_dir=tmp_path / "out", simulate_latency=True,
@@ -67,7 +69,7 @@ def test_confirmed_alert_waits_for_clip_and_has_evidence(tmp_path):
     assert ev.state == "confirmed" and 3.4 <= ev.t <= 4.1          # fire from 2 s, >= 60% of a 3 s window
     assert abs(ev.verdict_t - (ev.t + 2.0)) < 0.25                  # Qwen latency replayed in video time
     assert rec.sent == [("alert", 1, "confirmed", True)]           # sent once, with the clip
-    assert ver.calls[0] == (5, True, "fire")                        # 5 frames + crop
+    assert ver.calls[0] == (5, True, "fire", False)                 # 5 frames + crop, thinking off
     d = tmp_path / "out" / "events" / "E001"
     assert all((d / f).stat().st_size > 0 for f in ("snapshot.jpg", "crop.jpg", "clip.mp4", "event.json"))
     assert abs(ev.files["clip_s"] - (min(ev.t, 5) + 3)) < 0.6       # 5 s before (the video starts at 0) + 3 s after
@@ -133,8 +135,8 @@ def test_comes_back_after_normal_possible_fire_then_upgrade(tmp_path):
 class SilentVerifier(FakeVerifier):
     """Qwen never answers."""
 
-    def submit(self, frames, crop, cls):
-        self.calls.append((len(frames), len(crop) > 0, cls))
+    def submit(self, frames, crop, cls, thinking=False):
+        self.calls.append((len(frames), len(crop) > 0, cls, thinking))
         return Future()
 
 
@@ -155,3 +157,35 @@ def test_stop_while_waiting_for_qwen_after_the_video_ends(tmp_path):
     stop.set()
     th.join(timeout=2)
     assert not th.is_alive(), "Ctrl+C must not wait for Qwen (timeout_s)"
+
+
+def test_two_step_fire_is_confirmed_by_the_thinking_check(tmp_path):
+    pipe, rec, ver = _run(tmp_path, ["CONFIRMED", "CONFIRMED"], early=True, confirm=True)
+    ev = pipe.events[0]
+    assert [c[3] for c in ver.calls] == [False, True]               # fast, then the same frames with thinking
+    assert rec.sent == [("early", 1, "checking", False), ("alert", 1, "confirmed", True)]
+    assert [c["purpose"] for c in ev.calls] == ["initial_fast", "initial"] and pipe.em._n_calls(ev) == 1
+
+
+def test_two_step_night_fog_is_dropped_by_the_thinking_check(tmp_path):
+    pipe, rec, ver = _run(tmp_path, ["CONFIRMED", "NORMAL"], early=True, confirm=True)   # the fast check was fooled
+    assert [c[3] for c in ver.calls] == [False, True]
+    assert [k for k, *_ in rec.sent] == ["early", "dismissed"]                                   # nothing loud
+
+
+def test_two_step_normal_needs_no_second_call(tmp_path):
+    _, rec, ver = _run(tmp_path, ["NORMAL"], early=True, confirm=True)
+    assert [c[3] for c in ver.calls] == [False]
+
+
+def test_two_step_unsure_is_checked_with_thinking_too(tmp_path):
+    pipe, rec, ver = _run(tmp_path, ["UNCERTAIN", "UNCERTAIN"], early=True, confirm=True)
+    assert [c[3] for c in ver.calls][:2] == [False, True] and pipe.events[0].state in ("possible", "confirmed")
+
+
+def test_two_step_comes_back_possible_fire_at_once_then_thinking_confirms(tmp_path):
+    # NORMAL, then it comes back: possible fire goes out at once; the fast CONFIRMED is checked with thinking before the upgrade
+    pipe, rec, ver = _run(tmp_path, ["NORMAL", "CONFIRMED", "CONFIRMED"], early=True, confirm=True, latency=5.0,
+                          on=lambda s: 2 <= s < 4 or s >= 14)
+    assert [c[3] for c in ver.calls] == [False, False, True]
+    assert [k for k, *_ in rec.sent][-2:] == ["alert", "upgrade"] and pipe.events[0].state == "confirmed"

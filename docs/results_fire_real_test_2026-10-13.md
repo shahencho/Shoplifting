@@ -244,6 +244,25 @@ Measured on the clip (best fire box per second, live model and size):
 So "re-ask only when it grows or the score rises" alone would have missed this fire again. A small fire in a bin
 or bag stays the same size on camera. What gives it away is that **it keeps coming back on the same spot**.
 
+## How the system behaves now (summary, 2026-10-14)
+
+1. The detector sees fire/smoke in **60 % of the checks of the last 3 s on one spot** → silent 🟡 note "checking with
+   AI" + **Qwen call, thinking off** (~3 s).
+2. **Qwen NORMAL** → the note is edited to "⚪ AI did not confirm, still watching". The spot is **watched, never muted**.
+3. **Qwen fire / unsure** → asked **once more with thinking** (~15-40 s, option C) before anything loud goes out.
+   Thinking says fire → 🔥 (loud); unsure → ⚠️ (loud); NORMAL → ⚪ watched. The 🟡 note says "checking" meanwhile.
+4. **A watched spot**: it **comes back** after ≥ 10 s without passing → ⚠️ at once + Qwen again (fast, then thinking
+   if positive; thinking says fire → 🔥 upgrade); it **grows / gets stronger** → Qwen again; **unchanged** → nothing;
+   **2 min quiet** → "✅ closed".
+5. **Look-alike guard**: after the AI called a spot NORMAL **twice**, a re-trip no longer alerts at once, it only asks
+   Qwen again (morning fog flickering on a patch of ground, see below).
+6. **Limits**: ≤ 4 Qwen questions per incident (a fast + thinking pair counts as one), ≥ 20 s apart for growth checks.
+7. **Only the customer silences a spot**: "False alarm" (dashboard or Telegram button) → ignored until it grows /
+   gets stronger, 24 h at most.
+8. After a 🔥/⚠️ alert: 60 s without new incidents on the camera (a ⚠️ can still be upgraded), no "closed" note.
+
+Everything below is the reasoning, the numbers and the tests behind it.
+
 ## Solution (agreed and implemented 2026-10-13)
 
 Principle (from NFPA 72): **the AI's "no" opens a watch window. It never mutes. A re-trip in the window is the
@@ -303,8 +322,8 @@ Config (`fire/config.yaml`):
 temporal: {window_s: 3, min_ratio: 0.6, iou: 0.3, checks_per_s: 5}
 cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_every_s: 15}
 watch: {retrip_gap_s: 10, grow_ratio: 1.5, score_rise: 0.15, min_call_gap_s: 20, max_calls: 4, close_after_s: 120,
-        lookalike_h: 24}
-verify: {model: qwen/qwen3.6-plus, reasoning: none, frames: 5, ...}
+        lookalike_h: 24, lookalike_after: 2}
+verify: {model: qwen/qwen3.6-plus, reasoning: none, confirm_with_thinking: true, frames: 5, ...}
 alerts: {early_note: {enabled: true, silent: true}, ...}
 ```
 
@@ -335,8 +354,10 @@ that stops being detected may be hidden by its own smoke. Armenian:
 
 ### Qwen itself
 
-- **Thinking off** (`verify.reasoning: none`). Decided 2026-10-13: thinking only if a test shows it is needed.
-  The Qwen-only test gave the same verdicts at ~3 s instead of ~14 s, at ~$0.0007 per call.
+- **Thinking off for the first answer** (`verify.reasoning: none`). Decided 2026-10-13: thinking only if a test shows
+  it is needed. The Qwen-only test gave the same verdicts at ~3 s instead of ~14 s, at ~$0.0007 per call.
+- **Thinking on for positive answers only** (`verify.confirm_with_thinking: true`, option C, decided 2026-10-14):
+  see "Decision: two-step check".
 - **Prompt: unchanged.** The night prompt did not help (see "Qwen-only prompt test"). A re-ask uses the same
   prompt with fresh frames; on this clip that is enough (the flare-up is CONFIRMED 24/24 in the prompt test and
   3/3 in the replays below).
@@ -392,18 +413,62 @@ lower threshold adds no calls here. **2 false alerts**, both night/IR fog:
 | `neg_HWsNl` fog over houses, IR | ⚠️ UNCERTAIN: "flickering light behind the tree in heavy fog" (2.7 s, $0.0006) | NORMAL: "static Christmas lights" (16.7 s, $0.002) |
 | `neg_ZhYtkD` NVR screen with drifting fog, filmed by phone | 🔥 CONFIRMED: "thick billowing smoke" (3.2 s, $0.0005) | NORMAL ×2: "fog lit by a light source" (32–38 s, $0.004 each) |
 
-### Open decision: thinking off vs the fog false alerts
+### Decision: two-step check (option C, 2026-10-14)
 
-The rule was "thinking only if a test shows it is needed". This test shows it matters for fog at night:
+Thinking off alone gave 2 false alerts on night fog; thinking on for every call is 5-12× slower and dearer, and 2 of
+60 thinking answers were unreadable (an error counts as a loud ⚠️). Option C: the fast answer (thinking off) is final
+when NORMAL; **a positive answer (fire / unsure; fire for an alert already out) is asked once more, same frames, with
+thinking, before the loud alert**.
 
-| Option | Fire clip | Fog videos | Speed / cost |
+| | A. Thinking off | B. Thinking on for every call | **C. Two steps (chosen)** |
 |---|---|---|---|
-| A. Thinking off (committed) | 🔥 at ~76 s | 2 false alerts (⚠️ + 🔥) | ~3 s, ~$0.0006 per call |
-| B. Thinking on for every call | caught (flare-up CONFIRMED 3/3 in the prompt test) | NORMAL | 15–40 s, $0.002–0.004 per call |
-| C. Two steps: thinking off first; only a fire / unsure answer is checked again with thinking before the loud alert (the 🟡 note says "checking" meanwhile). A NORMAL stays fast, and a re-trip still sends ⚠️ at once | caught, 🔥 ~15–35 s later | NORMAL (to verify) | thinking only on the few positive answers |
+| Qwen busy per call | ~3 s | 15-40 s | ~3 s; 15-40 s only on positives |
+| Cost, 100 cameras per month (est.) | ~$16 | ~$80 | ~$20 |
+| Risk | false alarms on fog / night look-alikes | slow alarms, unreadable answers | a real 🔥 comes 15-30 s later; the re-trip ⚠️ still goes out at once |
 
-On the theft demo a similar two-step check missed one theft more; here the watched-spot rules (re-trip ⚠️ at
-once, re-checks on growth) are the safety net if the second step wrongly says NORMAL.
+Tested end to end (real Qwen, `fire/outputs/eval/20261014_*_optionC_*`; 10 calls, $0.015, deliberately few):
+
+| Recording | Result | Calls |
+|---|---|---|
+| Your fire clip `utaxi_fire_20261013` (1 check/s) | 🟡 39 s → NORMAL → comes back 73 s: ⚠️ at once, fast CONFIRMED (3.5 s), thinking CONFIRMED (17 s) → **🔥 at ~94 s** | 3, $0.004 |
+| Street car fire | fast CONFIRMED → thinking CONFIRMED → **🔥 at 24.9 s** (11.5 s with thinking off) | 2, $0.003 |
+| `neg_HWsNl` fog over houses | 1st trigger NORMAL; 2nd trigger fast UNCERTAIN → thinking **NORMAL** → **no alert** (was a false ⚠️) | 3, $0.004 |
+| `neg_ZhYtkD` phone filming a recorder screen with fog | fast CONFIRMED → thinking CONFIRMED → **false 🔥 remains** (36 s) | 2, $0.004 |
+
+So C removes the houses-in-fog false alert and costs ~13-20 s on real fires. The recorder-screen video is still a
+false 🔥: the thinking check agreed with the fast one at the 60 % trigger (at 80 % it said NORMAL twice). It is a
+phone filming a screen of drifting fog, not a normal installation, so it is left as a known limit. Not re-run on
+purpose, to save tokens: the WLNE indoor fire, the police car fire, the other no-fire videos, the morning fog clip.
+
+### Morning fog false alarms (2026-10-14)
+
+At ~07:00 the camera switched from infrared to colour. Between 07:02 and 08:20 the old code raised **46 events**, one
+every 1-2 min, all on **one patch of bare ground at the bottom of the frame** (box ~486-589 × 520-576, smoke 0.35-0.64)
+in morning fog: 28 Qwen calls, all NORMAL ("morning fog, a crack in the concrete"), 23 more notes ended with "all
+clear" without any check. It is not that the system "doesn't know it is morning": the detector flags a fixed patch
+in fog, flickering on and off.
+
+The new rules would have made it worse: every flicker "comes back" after a NORMAL → a loud ⚠️ every ~80 s. So the
+**look-alike guard** (`watch.lookalike_after: 2`): after the AI called a spot NORMAL twice, a re-trip only asks Qwen
+again and alerts only if Qwen no longer says NORMAL; a re-trip that Qwen calls NORMAL keeps the spot watched (it used
+to start a new incident), and a spot that already sent ⚠️ is not "closed" later.
+
+Replay of the camera's own recording 07:22-07:28 (`fire/data/utaxi_morning_fog_20261014.mp4`, labelled no fire),
+real Qwen, thinking off: before ~4 notes + several "all clear" in 6 min; now 1 silent note and **1 ⚠️** (the first
+re-trip), 2 calls. The remaining ⚠️ is the price of the "comes back" rule, once per such spot and incident. If it is
+too noisy: require Qwen's answer before the first re-trip ⚠️ (~3 s later; the fire clip would still alert).
+
+### Status (2026-10-14)
+
+- Code: commits `c23bfeb` (watched spots, 60 %, thinking off), `2a697c2` (look-alike guard), then the two-step check.
+  Tests: `fire/tests`, 56 pass.
+- **Droplet**: the code is pushed to `origin/fire-demo` and checked out in `/root/Shoplifting`, tests run there. The app
+  is **not started** (pm2 `fire-demo` stays stopped) because the Telegram bot runs locally for the daylight test
+  (same bot: two programs polling it give "409 Conflict"). To start it later:
+  `ssh do-deploy "bash ~/Shoplifting/fire/deploy/deploy_to_do.sh"` (restarts and health-checks) after stopping the local app.
+- **Local**: the app on the Utaxi camera runs the new code (`fire\.venv\Scripts\python -u -m fire.run_live`).
+- Next: a fire test in daylight (colour picture, where flames look orange): this is where the detector's and Qwen's
+  colour cues work. Compare with the night result above.
 
 ### Sources
 

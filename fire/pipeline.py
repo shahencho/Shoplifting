@@ -49,6 +49,10 @@ class Pipeline:
         self.window_s = tc["window_s"]
         self.n_frames = cfg["verify"].get("frames", 5)
         self.note = (cfg["alerts"].get("early_note") or {}).get("enabled", True)   # 🟡 note when Qwen is asked
+        # two-step check: the fast answer (thinking off) is final when NORMAL; a positive one is asked once more
+        # with thinking before the loud alert (verify.confirm_with_thinking)
+        self.confirm = bool(cfg["verify"].get("confirm_with_thinking", False))
+        self._payload: dict[int, tuple] = {}                        # id(action) -> (frames, crop, cls) for step two
         self.clip_before_s = ev["clip_before_s"]
         self.clip_after_s = ev["clip_after_s"]
         self.conf = {c: d["conf"] for c, d in cfg["detections"].items()}
@@ -170,6 +174,7 @@ class Pipeline:
     def _submit(self, act: Action, frame: np.ndarray, crop_jpg: bytes, box: Box, t: float) -> None:
         frames = qwen_frames(self.stream.clip(t - self.window_s, t - 1e-6), frame, self.n_frames)
         self._verdicts.append((act, self.verifier.submit(frames, crop_jpg, box.cls), t))
+        self._payload[id(act)] = (frames, crop_jpg, box.cls)
         self.stats["qwen_calls"] += 1
         self.save_event(act.event)
 
@@ -183,8 +188,27 @@ class Pipeline:
                 continue
             self._verdicts.remove(item)
             t_ans = t_asked + v.latency_s if self.simulate_latency else t
-            notice = self.em.on_verdict(act, v, t_ans)
             ev = act.event
+            step2 = act.second
+            if self.confirm and not step2 and self._positive(act, v):
+                # step two: the same frames once more, with thinking, before anything loud goes out
+                frames, crop_jpg, cls = self._payload[id(act)]
+                ev.calls.append({"purpose": f"{act.purpose}_fast", "t_asked": round(t_asked, 2),
+                                 "t_answer": round(t_ans, 2), "verdict": v.verdict, "confidence": v.confidence,
+                                 "reason": v.reason, "latency_s": round(v.latency_s, 2), "cost_usd": v.cost_usd,
+                                 "model": getattr(v, "model", "")})
+                self.stats["qwen_cost_usd"] += v.cost_usd
+                self.log(f"[E{ev.n}] {act.purpose} fast answer {v.verdict} ({v.latency_s:.1f} s) -> asking again with thinking")
+                act.second, act.first = True, v
+                self._verdicts.append((act, self.verifier.submit(frames, crop_jpg, cls, thinking=True), t_ans))
+                self.stats["qwen_calls"] += 1
+                self.save_event(ev)
+                continue
+            first = act.first
+            if step2 and v.verdict in ("ERROR", "TIMEOUT") and first is not None:
+                v = first                          # the thinking check failed: keep the fast answer
+            self._payload.pop(id(act), None)
+            notice = self.em.on_verdict(act, v, t_ans)
             ev.calls[-1]["t_asked"] = round(t_asked, 2)
             self.stats["qwen_cost_usd"] += v.cost_usd
             self.log(f"[E{ev.n}] {act.purpose} verdict {v.verdict} ({v.latency_s:.1f} s, ${v.cost_usd:.4f}) "
@@ -198,6 +222,14 @@ class Pipeline:
                 self._waiting.append(notice)        # sent as soon as the clip is written
             else:
                 self._send(notice)
+
+    @staticmethod
+    def _positive(act: Action, v) -> bool:
+        """A fast answer that would change what the customer sees: fire / unsure for a new check, fire for an
+        alert already out (upgrade). NORMAL never needs the slow check."""
+        if act.purpose in ("upgrade", "retrip"):
+            return v.verdict == "CONFIRMED"
+        return v.verdict in ("CONFIRMED", "UNCERTAIN")
 
     def _finish_clips(self, t: float, final: bool = False) -> None:
         for item in list(self._clips):
