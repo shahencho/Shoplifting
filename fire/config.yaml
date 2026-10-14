@@ -21,9 +21,10 @@ cooldown: {after_alert_s: 60, alert_scope: camera, allow_upgrade: true, recheck_
 # After Qwen says NORMAL the spot is watched, never muted (docs/results_fire_real_test_2026-10-13.md): it comes back
 # after retrip_gap_s without passing -> possible-fire alert at once + Qwen again; it grows (area x grow_ratio) or gets
 # stronger (score + score_rise) -> Qwen again; no change -> no calls. Calls per incident <= max_calls, >= min_call_gap_s
-# apart. Quiet for close_after_s -> closed. "False alarm" from the customer: ignored until it changes, lookalike_h hours
+# apart. Quiet for close_after_s -> closed. After lookalike_after NORMALs on one spot a re-trip no longer alerts at once
+# (only asks Qwen). "False alarm" from the customer: ignored until it changes, lookalike_h hours
 watch: {retrip_gap_s: 10, grow_ratio: 1.5, score_rise: 0.15, min_call_gap_s: 20, max_calls: 4, close_after_s: 120,
-        lookalike_h: 24}
+        lookalike_h: 24, lookalike_after: 2}
 
 # reasoning: none = thinking off (decided 2026-10-13: thinking only if a test shows it is needed). Qwen-only test on
 # the real fire: same verdicts as thinking on, ~3 s instead of ~14 s, ~$0.0007 per call

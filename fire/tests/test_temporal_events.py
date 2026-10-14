@@ -93,6 +93,14 @@ def test_comes_back_after_normal_alerts_at_once_and_qwen_can_confirm():
     assert ev.state == "confirmed" and 20 <= ev.retrip_t <= 23
 
 
+def test_a_spot_called_normal_twice_stops_alerting_at_once_when_it_flickers_back():
+    # morning fog on a patch of ground, 2026-10-14: it flickers back every ~80 s, Qwen says NORMAL every time
+    seq = ([[A]] * 25 + [[]] * 375) * 5                # 5 s on, 75 s off, five times
+    em, notices = drive(seq, lambda a: "NORMAL", note=True)
+    assert [k for _, k, _ in notices].count("alert") == 1          # the first re-trip only: the second NORMAL ends it
+    assert len(em.events) == 1 and len(em.events[0].calls) <= 4
+
+
 def test_grows_after_normal_asks_again():
     big = Box("fire", 0.5, (90, 90, 230, 230))         # contains A, area ~2x
     seq = [[A]] * 50 + [[big]] * 150                   # same spot, twice as big from 10 s

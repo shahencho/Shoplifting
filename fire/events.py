@@ -108,7 +108,7 @@ class EventManager:
     def __init__(self, after_alert_s: float = 60, *, iou_thr: float = 0.3, allow_upgrade: bool = True,
                  recheck_every_s: float = 15, still_gap_s: float = 10, retrip_gap_s: float = 10,
                  grow_ratio: float = 1.5, score_rise: float = 0.15, min_call_gap_s: float = 20, max_calls: int = 4,
-                 close_after_s: float = 120, lookalike_s: float = 24 * 3600):
+                 close_after_s: float = 120, lookalike_s: float = 24 * 3600, lookalike_after: int = 2):
         self.after_alert_s = after_alert_s
         self.iou_thr = iou_thr
         self.allow_upgrade = allow_upgrade
@@ -121,6 +121,7 @@ class EventManager:
         self.max_calls = max_calls
         self.close_after_s = close_after_s
         self.lookalike_s = lookalike_s
+        self.lookalike_after = lookalike_after          # AI "normal"s on one spot before a re-trip stops alerting at once
         self.events: list[Event] = []
         self.cooldown_until = float("-inf")
         self.spots: list[Spot] = []                     # watched after a NORMAL
@@ -141,7 +142,8 @@ class EventManager:
                    recheck_every_s=c.get("recheck_every_s", 15), retrip_gap_s=w.get("retrip_gap_s", 10),
                    grow_ratio=w.get("grow_ratio", 1.5), score_rise=w.get("score_rise", 0.15),
                    min_call_gap_s=w.get("min_call_gap_s", 20), max_calls=w.get("max_calls", 4),
-                   close_after_s=w.get("close_after_s", 120), lookalike_s=w.get("lookalike_h", 24) * 3600)
+                   close_after_s=w.get("close_after_s", 120), lookalike_s=w.get("lookalike_h", 24) * 3600,
+                   lookalike_after=w.get("lookalike_after", 2))
 
     # --- customer ---
 
@@ -165,6 +167,8 @@ class EventManager:
             if t - s.last_seen < self.close_after_s or (self.in_flight and self.in_flight.event is s.event):
                 continue
             self.spots.remove(s)
+            if s.event.state in ALERT_STATES:   # a ⚠️ already went out: no "closed", a fire may hide in its own smoke
+                continue
             s.event.state, s.event.closed_t = "cleared", t
             if s.event.early_t is not None:
                 out.append(Notice("closed", s.event))
@@ -219,8 +223,9 @@ class EventManager:
                  gap: float) -> Action | None:
         """A passing box on a spot Qwen called NORMAL: re-trip -> ⚠️ + Qwen; grows / stronger -> Qwen; else nothing."""
         ev = s.event
-        if gap >= self.retrip_gap_s:            # the gap itself rate-limits re-trips: only the call budget applies
-            can_ask = len(ev.calls) < self.max_calls
+        normals = sum(c["verdict"] == "NORMAL" for c in ev.calls)
+        if gap >= self.retrip_gap_s and normals < self.lookalike_after:
+            can_ask = len(ev.calls) < self.max_calls      # the gap itself rate-limits re-trips: only the budget applies
             self.spots.remove(s)
             ev.t, ev.idx, ev.ratio, ev.box, ev.boxes = t, idx, ratio, box, boxes
             ev.state, ev.retrip_t, ev.reason = "possible", t, ""
@@ -233,8 +238,11 @@ class EventManager:
         here = sum(1 for b in boxes if self._same_spot(b, s.box))
         grows = _area(box) >= self.grow_ratio * _area(s.box) or here > s.n_boxes
         stronger = box.conf >= s.box.conf + self.score_rise
+        # a spot the AI called NORMAL lookalike_after times keeps flickering back (morning fog on a patch of
+        # ground, 2026-10-14): a re-trip no longer alerts at once, it only asks Qwen again (within the budget)
+        comes_back = gap >= self.retrip_gap_s
         can_ask = len(ev.calls) < self.max_calls and t - s.last_call >= self.min_call_gap_s
-        if not ((grows or stronger) and can_ask):
+        if not ((grows or stronger or comes_back) and can_ask):
             return None
         s.box, s.n_boxes, s.last_call = box, here, t
         ev.t, ev.idx, ev.ratio, ev.box, ev.boxes = t, idx, ratio, box, boxes
@@ -257,6 +265,9 @@ class EventManager:
                 ev.state, ev.upgraded_t = "confirmed", t
                 ev.reason = v.reason or ev.reason
                 return Notice("upgrade", ev)
+            if state == "dismissed" and action.purpose == "retrip":     # the AI says no again: keep watching the spot
+                here = sum(1 for b in ev.boxes if self._same_spot(b, ev.box))
+                self.spots.append(Spot(ev, ev.box, here, last_seen=t, last_call=action.event.t))
             return None
         if action.purpose == "recheck":
             ev.reason = v.reason or ev.reason
